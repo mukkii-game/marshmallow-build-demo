@@ -3,7 +3,7 @@ window.MB = window.MB || {};
 
 MB.C = {
   COLS: 10,            // でっかいマシュマロの粗いグリッド
-  ROWS: 7,
+  ROWS: 8,
   SPAWN_X: 4,          // ピース左上の初期列
   WHITE: 0,            // マシュマロ色: 真っ白
   PINK: 1,             // マシュマロ色: いちご

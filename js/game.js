@@ -212,18 +212,24 @@ window.MB = window.MB || {};
       // 演出
       const R = MB.render.rects;
       let cx = 0, cy = 0;
-      for (const cell of r.cells) {
+      r.cells.forEach((cell, i) => {
         const px = R.field.x + (cell.x + 0.5) * R.cell;
         const py = R.field.y + (cell.y + 0.5) * R.cell;
         cx += px; cy += py;
         MB.fx.pop(px, py, cell.color);
-        MB.character.feed({ x: px, y: py }, cell.color, cell.s, Math.random() * 0.25);
+        MB.character.feed({ x: px, y: py }, cell.color, cell.s, i * 0.07, R.cell);
         this.stats.eaten++;
-      }
+      });
       cx /= r.cells.length; cy /= r.cells.length;
       if (MB.audio.ctx) {
         MB.sfx.groupClear(r.squares);
+        MB.sfx.mashu(); // 「ましゅ〜♪」とうれしそうに飛んでいく
         if (r.chainCells > 0) MB.sfx.sChain(r.chainCells);
+      }
+      MB.fx.text(cx, cy - R.cell * 1.6, 'ましゅ〜♪', '#ffb9d4', Math.max(16, R.cell * 0.42));
+      // うまく消えたらマロくんがよろこぶ
+      if (r.squares >= 2 || r.chainCells > 0) {
+        MB.character.say(U.pick(['ひらめいたー！！', 'できたー！！', 'てんさい かも！', 'すごい すごい！']), r.squares >= 3);
       }
       MB.fx.text(cx, cy - R.cell, `+${U.fmtScore(gained)}`, '#fff', Math.max(16, R.cell * 0.55));
       if (r.squares >= 3) {
@@ -258,6 +264,7 @@ window.MB = window.MB || {};
       MB.fx.doFlash(1);
       MB.fx.shake(8);
       MB.fx.text(MB.render.w / 2, MB.render.h * 0.4, 'マッハタイム!!', '#ffe28a', Math.max(30, MB.render.w * 0.04));
+      MB.character.say('マッハの スピードだー！！', true);
     },
 
     endMach() {
@@ -281,6 +288,7 @@ window.MB = window.MB || {};
       if (!(this.data.music === 'theme' && MB.music.mode === 'theme')) MB.music.stop();
       if (MB.audio.ctx) MB.sfx.stageClear();
       MB.character.mood = 'happy';
+      MB.character.say('かんりょー！！', true);
       this.data.clearedStages = Math.max(this.data.clearedStages, this.stageIndex + 1);
       this.data.bestStory = Math.max(this.data.bestStory, this.score);
       U.save(this.data);
@@ -291,6 +299,7 @@ window.MB = window.MB || {};
       MB.music.stop();
       if (MB.audio.ctx) MB.sfx.gameOver();
       MB.character.mood = 'ko';
+      MB.character.say('あふれたー！？');
       if (this.mode === 'endless') {
         this.data.bestEndless = Math.max(this.data.bestEndless, this.score);
         U.save(this.data);
@@ -488,6 +497,21 @@ window.MB = window.MB || {};
       } else if (settled) {
         this.spawnDelay -= dt;
         if (this.spawnDelay <= 0) this.spawnNext();
+      }
+
+      // マロくんの独り言（ときどき）
+      this.sayTimer = (this.sayTimer == null ? 7 : this.sayTimer) - dt;
+      if (this.sayTimer <= 0) {
+        this.sayTimer = U.rand(10, 17);
+        if (!MB.character.speech && !this.mach) {
+          const mood = MB.character.mood;
+          const lines =
+            mood === 'worried' ? ['わわわ…！', 'つみすぎ では！？'] :
+            mood === 'sleepy' ? ['ねむい…', 'コーヒー どこ…'] :
+            mood === 'flow' ? ['ノッてきたぞー！', 'いい かんじ！'] :
+            ['はやく かえりたいなー', 'マシュマロ たべたいなー', 'おしごと おしごと…', 'んしょ、んしょ…'];
+          MB.character.say(U.pick(lines));
+        }
       }
 
       // ピースのなめらか表示位置

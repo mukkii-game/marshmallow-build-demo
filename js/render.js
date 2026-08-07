@@ -244,6 +244,27 @@ window.MB = window.MB || {};
       }
     },
 
+    // 歓喜の顔（食べられる直前・飛行中: ＾＾ 目＋あけた口）
+    joyFace(ctx, cx, cy, s) {
+      ctx.strokeStyle = 'rgba(70,50,60,0.85)';
+      ctx.lineWidth = Math.max(1.5, s * 0.09);
+      ctx.lineCap = 'round';
+      for (const dx of [-0.3, 0.3]) {
+        ctx.beginPath();
+        ctx.arc(cx + s * dx, cy + s * 0.08, s * 0.16, Math.PI * 1.15, Math.PI * 1.85);
+        ctx.stroke();
+      }
+      ctx.fillStyle = 'rgba(160,80,80,0.85)';
+      ctx.beginPath();
+      ctx.ellipse(cx, cy + s * 0.26, s * 0.14, s * 0.17, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,140,160,0.45)';
+      ctx.beginPath();
+      ctx.ellipse(cx - s * 0.52, cy + s * 0.25, s * 0.14, s * 0.09, 0, 0, Math.PI * 2);
+      ctx.ellipse(cx + s * 0.52, cy + s * 0.25, s * 0.14, s * 0.09, 0, 0, Math.PI * 2);
+      ctx.fill();
+    },
+
     // にっこり顔（予約マシュマロ・キングマシュマロ用）
     face(ctx, cx, cy, s, beat) {
       const blink = beat != null && beat > 0.92;
@@ -431,21 +452,25 @@ window.MB = window.MB || {};
       this.portrait = h > w * 1.05;
       const R = {};
       if (!this.portrait) {
-        // 横画面: 左パネル + 中央フィールド + 右ネクスト/ボタン
-        const cell = Math.min((h * 0.60) / C.ROWS, (w * 0.55) / C.COLS);
+        // 横画面: できるだけ上からフィールドを配置（左パネル + 中央フィールド + 右ネクスト/ボタン）
+        const hudH = Math.max(18, h * 0.042);
+        const hudY = 6;
+        // 縦の残りとヨコ幅制限からセルサイズを逆算
+        const cell = Math.min((h - hudY - hudH - 80) / (C.ROWS + 3.35), (w * 0.55) / C.COLS);
         const fw = cell * C.COLS, fh = cell * C.ROWS;
         const topPad = cell * 2.15;              // スポーン領域（ウィンドウ内）
         const winBarH = Math.max(20, cell * 0.5); // ウィンドウタイトルバー
         const barsH = cell * 0.68;
         let fx = w * 0.60 - fw / 2;
         fx = Math.min(fx, w - fw - cell * 2.7);  // 右のネクストが収まるように
-        const fy = h * 0.965 - fh;
+        const barsY = hudY + hudH + 5;
+        const fy = barsY + barsH + 12 + winBarH + topPad;
         R.cell = cell;
         R.topPad = topPad;
         R.winBarH = winBarH;
         R.field = { x: fx, y: fy, w: fw, h: fh };
-        R.bars = { x: fx, y: fy - topPad - winBarH - barsH - 12, w: fw, h: barsH };
-        R.hud = { x: fx, y: Math.max(4, R.bars.y - h * 0.052), w: fw, h: h * 0.045 };
+        R.bars = { x: fx, y: barsY, w: fw, h: barsH };
+        R.hud = { x: fx, y: hudY, w: fw, h: hudH };
         R.panel = { x: w * 0.015, y: h * 0.09, w: fx - w * 0.05, h: h * 0.88 };
         R.next = { x: fx + fw + cell * 0.4, y: fy - topPad, w: cell * 1.7, h: cell * 6 };
         // 操作ボタン: フィールド右下の2列グリッド
@@ -465,7 +490,7 @@ window.MB = window.MB || {};
         };
       } else {
         // 縦画面: 上フィールド + 下キャラ + ボタン
-        const cell = Math.min((w * 0.96) / C.COLS, (h * 0.37) / C.ROWS);
+        const cell = Math.min((w * 0.96) / C.COLS, (h * 0.42) / C.ROWS);
         const fw = cell * C.COLS, fh = cell * C.ROWS;
         const topPad = cell * 2.15;
         const winBarH = Math.max(16, cell * 0.5);
@@ -482,7 +507,7 @@ window.MB = window.MB || {};
         const btnH = Math.min(h * 0.14, 110);
         R.panel = { x: w * 0.26, y: fy + fh + h * 0.005, w: w * 0.48, h: Math.max(120, h - (fy + fh) - btnH - h * 0.02) };
         const bs = Math.min(86, w * 0.16);
-        const ly = h - bs * 1.3, lx = w * 0.02;
+        const ly = h - bs * 1.5, lx = w * 0.02;
         const rx = w - w * 0.02 - bs * 2.2;
         R.buttons = {
           size: bs,
@@ -743,6 +768,8 @@ window.MB = window.MB || {};
             s: cd.s, sweeping: cd.sweeping, noFace: true,
             marked: cd.marked, sx: sq.sx * bp, sy: sq.sy * bp, rot,
           });
+          // 回収中は歓喜の表情（もうすぐ食べてもらえる！）
+          if (cd.sweeping) MB.draw.joyFace(ctx, px + cell / 2, py + cell * 0.44, cell * 0.5);
         }
       }
       // パスB: 同色・同状態の隣どうしをブリッジで融合

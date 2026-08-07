@@ -31,19 +31,30 @@ window.MB = window.MB || {};
       this.zzz = 0;
       this.eatBurst = 0;
       this.munchCombo = 0;
+      this.speech = null;
+      this.gulpT = 0;
+      this.happyT = 0;
+      this.ateSinceGulp = 0;
     },
 
-    // マシュマロを口へ飛ばす（fromは画面座標）
-    feed(from, color, s, delay) {
+    // マシュマロを口へ飛ばす（fromは画面座標、pxはそのままの大きさ）
+    feed(from, color, s, delay, px) {
       this.flying.push({
         from: { x: from.x, y: from.y },
         to: null, // 描画時の口位置で解決
         t: -(delay || 0),
-        dur: U.rand(0.45, 0.62),
+        dur: U.rand(0.55, 0.75),
         color, s,
-        arc: U.rand(60, 140),
-        size: U.rand(0.8, 1.1),
+        arc: U.rand(90, 180),
+        px: px || 42,
+        sway: U.rand(0, 6),
+        trail: 0,
       });
+    },
+
+    // マロくんのセリフ（大きなポップ文字）
+    say(text, big) {
+      this.speech = { text, t: 0, life: big ? 2.2 : 1.7, big: !!big };
     },
 
     update(dt) {
@@ -76,8 +87,9 @@ window.MB = window.MB || {};
         const now = performance.now();
         for (const f of arrived) {
           this.munch = 1;
-          this.cheek = Math.min(1, this.cheek + 0.34);
+          this.cheek = Math.min(1.4, this.cheek + 0.5); // おおきく ほおばる
           this.eatenCount++;
+          this.ateSinceGulp = (this.ateSinceGulp || 0) + 1;
           // 続けて食べると「ぽぽぽぽーん」と音が駆け上がる
           this.munchCombo = now - this.lastMunchT < 900 ? this.munchCombo + 1 : 1;
           this.lastMunchT = now;
@@ -89,6 +101,23 @@ window.MB = window.MB || {};
                        this.munchCombo % 2 ? '♪' : '❤', '#ff9ec6', 18);
           }
         }
+      }
+
+      // ぜんぶ食べ終わったら「ごくん」→にっこり
+      if ((this.ateSinceGulp || 0) > 0 && this.flying.length === 0 && this.munch <= 0 && !(this.gulpT > 0)) {
+        this.gulpT = 0.45;
+        this.happyT = 1.0;
+        this.ateSinceGulp = 0;
+        if (MB.sfx && MB.audio.ctx) MB.sfx.gulp();
+        if (Math.random() < 0.25) this.say('おいしー！');
+      }
+      if (this.gulpT > 0) this.gulpT -= dt;
+      if (this.happyT > 0) this.happyT -= dt;
+
+      // セリフの時間経過
+      if (this.speech) {
+        this.speech.t += dt;
+        if (this.speech.t > this.speech.life) this.speech = null;
       }
     },
 
@@ -125,12 +154,42 @@ window.MB = window.MB || {};
       const charScale = s * (opts.mini ? 0.72 : 0.95);
       this.drawProgrammer(ctx, charCx, deskY, charScale, palette, rect);
 
-      // 飛行中マシュマロ
+      // 飛行中マシュマロ（おおきいまま、くるんと気持ちいい曲線で）
       for (const f of this.flying) {
         if (f.t < 0) continue;
         const p = this.flyPos(f);
-        const r = 10 * s * f.size * (1 - p.t * 0.25);
-        MB.draw.marshmallow(ctx, p.x - r, p.y - r, r * 2, f.color, { s: f.s, round: 0.5 });
+        const sz = f.px * (1 - 0.35 * Math.max(0, (p.t - 0.72) / 0.28)); // 口に入る直前だけ少し縮む
+        const wob = 1 + 0.13 * Math.sin(p.t * Math.PI * 2 + f.sway);
+        const rot = Math.sin(p.t * Math.PI * 1.6 + f.sway) * 0.28;
+        MB.draw.marshmallow(ctx, p.x - sz / 2, p.y - sz / 2, sz, f.color, {
+          s: f.s, round: 0.44, rot, sx: wob, sy: 2 - wob,
+        });
+        MB.draw.joyFace(ctx, p.x, p.y - sz * 0.05, sz * 0.5);
+        // キラキラの軌跡
+        f.trail++;
+        if (f.trail % 4 === 0 && MB.fx) MB.fx.crumbs(p.x, p.y + sz * 0.3, f.color);
+      }
+
+      // セリフ（大きなポップ文字）
+      if (this.speech && this.headTop) {
+        const sp = this.speech;
+        const pr = sp.t / sp.life;
+        const popIn = MB.util.easeOut(MB.util.clamp(sp.t / 0.14, 0, 1));
+        const alpha = pr > 0.75 ? 1 - (pr - 0.75) / 0.25 : 1;
+        const size = Math.min(rect.w * 0.155, 34) * (sp.big ? 1.3 : 1) * (0.6 + 0.4 * popIn);
+        const sx2 = rect.x + rect.w / 2;
+        const sy2 = this.headTop.y - 26 - pr * 26 + Math.sin(sp.t * 6) * 2;
+        ctx.globalAlpha = alpha;
+        ctx.font = `${Math.round(size)}px ${MB.render.FONT_POP}`;
+        ctx.textAlign = 'center';
+        ctx.lineJoin = 'round';
+        ctx.lineWidth = size * 0.24;
+        ctx.strokeStyle = '#4a2a66';
+        ctx.strokeText(sp.text, sx2, sy2);
+        ctx.fillStyle = sp.big ? '#ffe28a' : '#fff';
+        ctx.fillText(sp.text, sx2, sy2);
+        ctx.textAlign = 'left';
+        ctx.globalAlpha = 1;
       }
 
       ctx.restore();
@@ -262,9 +321,11 @@ window.MB = window.MB || {};
       ctx.ellipse(cx, bodyY + bodyH * 0.16, bodyW * 0.34, bodyH * 0.3, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      // ---- 頭（首なしで体にめり込む） ----
+      // ---- 頭（首なしで体にめり込む・ごくんの時は少し下がる） ----
       const headR = 50 * s;
-      const headY = bodyY - bodyH / 2 - headR * 0.3;
+      const gulpDip = this.gulpT > 0 ? Math.sin((0.45 - this.gulpT) / 0.45 * Math.PI) * 7 * s : 0;
+      const headY = bodyY - bodyH / 2 - headR * 0.3 + gulpDip;
+      this.headTop = { x: cx, y: headY - headR };
       const skin = '#ffe0c2';
       ctx.fillStyle = skin;
       ctx.beginPath();
@@ -278,8 +339,8 @@ window.MB = window.MB || {};
       ctx.ellipse(cx, headY - headR * 0.55, headR * 0.92, headR * 0.5, 0, Math.PI, Math.PI * 2);
       ctx.fill();
 
-      // 頬（マシュマロ食べたらふくらむ）
-      const cheekR = headR * (0.22 + this.cheek * 0.25);
+      // 頬（ほおばると おおきく ふくらむ）
+      const cheekR = headR * (0.22 + this.cheek * 0.42);
       ctx.fillStyle = 'rgba(255,160,160,0.5)';
       ctx.beginPath();
       ctx.ellipse(cx - headR * 0.62, headY + headR * 0.28, cheekR, cheekR * 0.8, 0, 0, Math.PI * 2);
@@ -310,7 +371,7 @@ window.MB = window.MB || {};
       // 目
       const blink = this.blinkT < 0.12 || mood === 'sleepy' || mood === 'ko';
       ctx.fillStyle = '#2c2a3a';
-      if (mood === 'happy' || mood === 'beach') {
+      if (mood === 'happy' || mood === 'beach' || this.happyT > 0) {
         // にっこり
         ctx.strokeStyle = '#2c2a3a';
         ctx.lineWidth = 3 * s;
@@ -343,7 +404,7 @@ window.MB = window.MB || {};
       ctx.beginPath();
       if (this.munch > 0) {
         const open = 0.5 + 0.5 * Math.sin(this.munch * Math.PI * 4);
-        ctx.ellipse(cx, mouthY, headR * 0.16, headR * (0.05 + 0.13 * open), 0, 0, Math.PI * 2);
+        ctx.ellipse(cx, mouthY, headR * 0.2, headR * (0.06 + 0.17 * open), 0, 0, Math.PI * 2);
       } else if (mood === 'worried') {
         ctx.ellipse(cx, mouthY + headR * 0.03, headR * 0.14, headR * 0.05, 0, Math.PI, Math.PI * 2);
       } else if (mood === 'happy' || mood === 'beach' || mood === 'flow' || mood === 'mach') {

@@ -225,6 +225,20 @@ window.MB = window.MB || {};
 
   sfx.gaugeUp = () => bell({ freq: N.B5, dur: 0.25, gain: 0.06 });
 
+  // 「ましゅ〜♪」: マシュマロたちのうれしい鳴き声
+  sfx.mashu = () => {
+    tone({ type: 'triangle', freq: 740, freqEnd: 990, dur: 0.09, gain: 0.09, attack: 0.008 });
+    tone({ type: 'triangle', freq: 990, freqEnd: 1320, t: 0.09, dur: 0.16, gain: 0.08, attack: 0.006 });
+    tone({ type: 'sine', freq: 1480, freqEnd: 1970, t: 0.12, dur: 0.12, gain: 0.04 });
+  };
+
+  // 「ごくん」
+  sfx.gulp = () => {
+    tone({ type: 'sine', freq: 300, freqEnd: 110, dur: 0.14, gain: 0.13, attack: 0.01 });
+    noise({ dur: 0.06, gain: 0.05, freq: 400, freqEnd: 180, type: 'lowpass', t: 0.02 });
+    tone({ type: 'sine', freq: 200, freqEnd: 260, t: 0.16, dur: 0.07, gain: 0.06 });
+  };
+
   // マッハタイム発動: ライザー→ベル和音＋サブドロップ
   sfx.machStart = () => {
     noise({ dur: 0.45, gain: 0.1, freq: 500, freqEnd: 5000, type: 'bandpass', q: 2.5 });

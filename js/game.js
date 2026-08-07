@@ -636,7 +636,7 @@ window.MB = window.MB || {};
         ctx.strokeStyle = 'rgba(30,20,50,0.85)';
         ctx.lineJoin = 'round';
         const helpLines = [
-          ['🖱 マウスだけでOK： よこにドラッグ＝いどう ／ クリック・ホイールまわし＝まわす ／ みぎクリック・ホイールおし＝ストン！', r.h * 0.84],
+          ['🖱 マウスをうごかすだけで いどう ／ クリック・ホイールまわし＝まわす ／ みぎクリック・ホイールおし＝ストン！', r.h * 0.84],
           ['⌨ キーボード： ←→ いどう ／ ↑ Z X まわす ／ ↓ ゆっくり ／ Space ストン', r.h * 0.885],
           ['ためしばん — おとが でます 🔊（みぎうえで おんりょう）', r.h * 0.93],
         ];
@@ -690,7 +690,7 @@ window.MB = window.MB || {};
       ctx.font = `bold ${fs}px ${r.FONT}`;
       ctx.textAlign = 'center';
       ctx.fillStyle = '#fff';
-      ctx.fillText('🖱 よこに ドラッグ ＝ いどう ／ クリック・ホイール ＝ まわす', f.x + f.w / 2, by + bh * 0.38);
+      ctx.fillText('🖱 マウスを うごかすだけで いどう ／ クリック・ホイール ＝ まわす', f.x + f.w / 2, by + bh * 0.38);
       ctx.fillStyle = '#ffe28a';
       ctx.fillText('おとすのは 右クリック・ホイールおし・Space・⤓ボタン！', f.x + f.w / 2, by + bh * 0.76);
       ctx.textAlign = 'left';

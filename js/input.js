@@ -182,8 +182,25 @@ window.MB = window.MB || {};
 
     onPointerMove(e) {
       const g = this.game;
+      if (!g) return;
+      // マウスはホバーだけで左右移動（押さなくてOK）
+      if (e.pointerType === 'mouse' && e.buttons === 0 &&
+          g.state === MB.STATE.PLAY && g.field.piece) {
+        const R = MB.render.rects;
+        const f = R.field;
+        if (f && e.clientX >= f.x - R.cell * 1.5 && e.clientX <= f.x + f.w + R.cell * 1.5) {
+          const target = MB.util.clamp(Math.round((e.clientX - f.x) / R.cell - 1), 0, MB.C.COLS - 2);
+          let moved = false, guard = 0;
+          while (g.field.piece.x !== target && guard++ < MB.C.COLS) {
+            if (!g.field.tryMove(target > g.field.piece.x ? 1 : -1)) break;
+            moved = true;
+          }
+          if (moved && MB.audio.ctx) MB.sfx.move();
+        }
+        return;
+      }
       const p = this.pointers.get(e.pointerId);
-      if (!p || p.type !== 'field' || !g) return;
+      if (!p || p.type !== 'field') return;
       const cell = MB.render.rects.cell;
       const dx = e.clientX - p.sx;
       const col = Math.floor((e.clientX - MB.render.rects.field.x) / cell);

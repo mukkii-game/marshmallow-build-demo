@@ -549,11 +549,13 @@ window.MB = window.MB || {};
       if (p && game.state === MB.STATE.PLAY) {
         const gy = field.ghostY();
         if (gy > p.y) {
-          ctx.globalAlpha = 0.22;
-          for (const [i, dx, dy] of [[0, 0, 0], [1, 1, 0], [2, 0, 1], [3, 1, 1]]) {
-            MB.draw.marshmallow(ctx, f.x + (p.x + dx) * cell, f.y + (gy + dy) * cell, cell, p.cells[i].color, {});
-          }
-          ctx.globalAlpha = 1;
+          // 着地予測: 点線の枠だけ（マシュマロと見間違えないように）
+          ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([7, 6]);
+          U.rr(ctx, f.x + p.x * cell + 3, f.y + gy * cell + 3, cell * 2 - 6, cell * 2 - 6, cell * 0.45);
+          ctx.stroke();
+          ctx.setLineDash([]);
         }
         for (const [i, dx, dy] of [[0, 0, 0], [1, 1, 0], [2, 0, 1], [3, 1, 1]]) {
           MB.draw.marshmallow(ctx, f.x + (p.x + dx) * cell, f.y + (p.y + dy) * cell, cell, p.cells[i].color, {

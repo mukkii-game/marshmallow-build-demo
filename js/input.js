@@ -29,6 +29,10 @@ window.MB = window.MB || {};
       canvas.addEventListener('pointercancel', (e) => this.onPointerUp(e));
       canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
+      // 中クリックの自動スクロールを無効化
+      canvas.addEventListener('auxclick', (e) => e.preventDefault());
+      canvas.addEventListener('mousedown', (e) => { if (e.button === 1) e.preventDefault(); });
+
       // ホイールで回転
       this.wheelAcc = 0;
       canvas.addEventListener('wheel', (e) => {
@@ -126,8 +130,9 @@ window.MB = window.MB || {};
       if (e.pointerType === 'touch') g.touchMode = true;
       MB.audio.ensure();
 
-      // 右クリック = ストン（ハードドロップ）
-      if (e.button === 2) {
+      // 右クリック・ホイールクリック = ストン（ハードドロップ）
+      if (e.button === 2 || e.button === 1) {
+        e.preventDefault();
         if (g.state === MB.STATE.PLAY) g.action('hard');
         return;
       }

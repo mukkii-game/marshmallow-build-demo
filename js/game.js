@@ -49,8 +49,9 @@ window.MB = window.MB || {};
       this.input = input;
       this.field = new MB.Field();
       this.gen = new MB.PieceGen();
-      this.data = MB.util.load() || { bestStory: 0, bestEndless: 0, clearedStages: 0, volume: 0.5 };
+      this.data = MB.util.load() || { bestStory: 0, bestEndless: 0, clearedStages: 0, volume: 0.5, music: 'theme' };
       if (this.data.volume == null) this.data.volume = this.data.muted ? 0 : 0.5; // 旧データ移行
+      if (!this.data.music) this.data.music = 'theme'; // デフォルトはテーマ曲
       MB.audio.setVolume(this.data.volume);
       this.field.onClear = (r) => this.handleClear(r);
       this.field.onSweepMiss = () => this.handleSweepMiss();
@@ -162,7 +163,9 @@ window.MB = window.MB || {};
 
     beginPlay() {
       this.setState(S.PLAY);
-      MB.music.startStage(this.stage);
+      MB.music.startStage(this.stage, null, this.data.music === 'theme');
+      // 最初のステージでは操作ヒントを表示
+      this.hintT = (this.mode === 'story' && this.stageIndex === 0) || this.mode === 'endless' ? 11 : 0;
       this.field.spawnDelayed = false;
       this.spawnNext();
     },
@@ -270,13 +273,14 @@ window.MB = window.MB || {};
       this.skinIdx++;
       if (this.skinIdx % MB.ENDLESS.order.length === 0) this.endlessLoop++;
       this.stage = this.makeEndlessStage();
-      MB.music.startStage(this.stage, this.stage.bpm);
+      MB.music.startStage(this.stage, this.stage.bpm, this.data.music === 'theme');
       MB.fx.text(MB.render.w / 2, MB.render.h * 0.3, `${this.stage.time} ${this.stage.name}`, '#fff', 26);
     },
 
     stageClear() {
       this.setState(S.STAGE_CLEAR);
-      MB.music.stop();
+      // テーマ曲モード中は曲を止めずに続ける（つぎのステージへシームレスに）
+      if (!(this.data.music === 'theme' && MB.music.mode === 'theme')) MB.music.stop();
       if (MB.audio.ctx) MB.sfx.stageClear();
       MB.character.mood = 'happy';
       this.data.clearedStages = Math.max(this.data.clearedStages, this.stageIndex + 1);
@@ -367,6 +371,14 @@ window.MB = window.MB || {};
         case 'pause_title': MB.music.stop(); this.backToTitle(); break;
         case 'pause_mute': this.cycleVolume(); break;
         case 'vol_cycle': this.cycleVolume(); break;
+        case 'menu_music':
+          this.data.music = this.data.music === 'theme' ? 'gen' : 'theme';
+          U.save(this.data);
+          if (this.state === S.MENU) {
+            if (this.data.music === 'theme') MB.music.playThemeSolo(0.55);
+            else MB.music.stopTheme();
+          }
+          break;
         case 'over_retry': this.retry(); break;
         case 'over_title': this.backToTitle(); break;
         case 'title_start': this.toMenu(); break;
@@ -380,7 +392,8 @@ window.MB = window.MB || {};
     },
 
     menuSelect(idx) {
-      MB.music.stopTheme();
+      // テーマ曲モードならタイトル→ゲームへ曲が途切れず続く
+      if (this.data.music !== 'theme') MB.music.stopTheme();
       if (idx === 0) this.startStory(0);
       else this.startEndless();
     },
@@ -511,6 +524,7 @@ window.MB = window.MB || {};
         this.drawEnding(ctx, r);
       } else {
         r.drawGame(this);
+        if (st === S.PLAY && this.hintT > 0) this.drawHint(ctx, r);
         if (st === S.STAGE_INTRO) this.drawStageIntro(ctx, r);
         else if (st === S.PAUSE) this.drawPause(ctx, r);
         else if (st === S.STAGE_CLEAR) this.drawStageClear(ctx, r);
@@ -606,10 +620,10 @@ window.MB = window.MB || {};
       }
 
       const isMenu = this.state === S.MENU;
-      const cy = r.h * (isMenu ? 0.18 : 0.16);
-      // ロゴ
-      const logoSize = Math.min(r.w * 0.115, 90);
-      this.drawLogo(ctx, r, cy, isMenu ? logoSize * 0.8 : logoSize);
+      const cy = r.h * (isMenu ? 0.18 : 0.17);
+      // ロゴ（でっかく・ぷくぷく）
+      const logoSize = Math.min(r.w * 0.155, 132);
+      this.drawLogo(ctx, r, cy, isMenu ? logoSize * 0.72 : logoSize);
 
       if (!isMenu) {
         this.drawRulesPanel(ctx, r, r.h * 0.27);
@@ -618,27 +632,69 @@ window.MB = window.MB || {};
         }
         ctx.font = `bold ${Math.min(r.w * 0.021, 15)}px ${r.FONT}`;
         ctx.textAlign = 'center';
-        ctx.fillStyle = 'rgba(255,255,255,0.6)';
-        ctx.fillText('🖱 マウスだけでOK： よこにドラッグ＝いどう ／ クリック・ホイール＝まわす ／ みぎクリック＝ストン！', r.w / 2, r.h * 0.84);
-        ctx.fillText('⌨ キーボード： ←→ いどう ／ ↑ Z X まわす ／ ↓ ゆっくり ／ Space ストン', r.w / 2, r.h * 0.885);
-        ctx.fillText('ためしばん — おとが でます 🔊（みぎうえで おんりょう）', r.w / 2, r.h * 0.93);
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = 'rgba(30,20,50,0.85)';
+        ctx.lineJoin = 'round';
+        const helpLines = [
+          ['🖱 マウスだけでOK： よこにドラッグ＝いどう ／ クリック・ホイールまわし＝まわす ／ みぎクリック・ホイールおし＝ストン！', r.h * 0.84],
+          ['⌨ キーボード： ←→ いどう ／ ↑ Z X まわす ／ ↓ ゆっくり ／ Space ストン', r.h * 0.885],
+          ['ためしばん — おとが でます 🔊（みぎうえで おんりょう）', r.h * 0.93],
+        ];
+        for (const [txt, y] of helpLines) {
+          ctx.strokeText(txt, r.w / 2, y);
+          ctx.fillStyle = 'rgba(255,255,255,0.85)';
+          ctx.fillText(txt, r.w / 2, y);
+        }
         ctx.textAlign = 'left';
       } else {
         // モード選択
         const bw = Math.min(r.w * 0.6, 420);
         const bh = Math.min(r.h * 0.12, 74);
-        this.uiButton(ctx, r, 'menu_story', 'ものがたり（よるの おしごと）', r.w / 2, r.h * 0.42, bw, bh, this.menuIndex === 0);
-        this.uiButton(ctx, r, 'menu_endless', 'エンドレス（とことん）', r.w / 2, r.h * 0.42 + bh * 1.35, bw, bh, this.menuIndex === 1);
+        this.uiButton(ctx, r, 'menu_story', 'ものがたり（よるの おしごと）', r.w / 2, r.h * 0.4, bw, bh, this.menuIndex === 0);
+        this.uiButton(ctx, r, 'menu_endless', 'エンドレス（とことん）', r.w / 2, r.h * 0.4 + bh * 1.3, bw, bh, this.menuIndex === 1);
+        // 音楽えらび
+        const musLabel = this.data.music === 'theme'
+          ? (MB.music.themeReady ? '♪ おんがく: マシュマロのうた' : '♪ おんがく: マシュマロのうた（このばんには 入ってないよ）')
+          : '♪ おんがく: じどうせいせいBGM';
+        this.uiButton(ctx, r, 'menu_music', musLabel, r.w / 2, r.h * 0.4 + bh * 2.5, bw * 0.94, bh * 0.72);
         ctx.font = `${Math.min(r.w * 0.024, 16)}px ${r.FONT}`;
         ctx.textAlign = 'center';
         ctx.fillStyle = 'rgba(255,255,255,0.7)';
         const cleared = this.data.clearedStages;
         ctx.fillText(cleared >= MB.STAGES.length ? '★ ものがたり クリアずみ！' : `おはなしの すすみ: ${cleared} / ${MB.STAGES.length}`,
-                     r.w / 2, r.h * 0.42 + bh * 2.35);
+                     r.w / 2, r.h * 0.4 + bh * 3.5);
         ctx.fillText(`ベスト: ものがたり ${U.fmtScore(this.data.bestStory)} ／ エンドレス ${U.fmtScore(this.data.bestEndless)}`,
-                     r.w / 2, r.h * 0.42 + bh * 2.35 + 24);
+                     r.w / 2, r.h * 0.4 + bh * 3.5 + 24);
         ctx.textAlign = 'left';
       }
+    },
+
+    // プレイ開始直後の操作ヒント
+    drawHint(ctx, r) {
+      const R = MB.render.rects;
+      const f = R.field;
+      const alpha = Math.min(1, this.hintT / 1.2);
+      const fs = Math.min(f.w * 0.033, 19);
+      const bw = f.w * 0.95;
+      const bh = fs * 4.6;
+      const bx = f.x + (f.w - bw) / 2;
+      const by = f.y + f.h * 0.22;
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = 'rgba(24,16,46,0.82)';
+      U.rr(ctx, bx, by, bw, bh, 14);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+      ctx.lineWidth = 1.5;
+      U.rr(ctx, bx, by, bw, bh, 14);
+      ctx.stroke();
+      ctx.font = `bold ${fs}px ${r.FONT}`;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#fff';
+      ctx.fillText('🖱 よこに ドラッグ ＝ いどう ／ クリック・ホイール ＝ まわす', f.x + f.w / 2, by + bh * 0.38);
+      ctx.fillStyle = '#ffe28a';
+      ctx.fillText('おとすのは 右クリック・ホイールおし・Space・⤓ボタン！', f.x + f.w / 2, by + bh * 0.76);
+      ctx.textAlign = 'left';
+      ctx.globalAlpha = 1;
     },
 
     // 描き文字ロゴ『マシュとマロ』
@@ -657,27 +713,36 @@ window.MB = window.MB || {};
         ctx.font = `${Math.round(size * ch.s)}px ${r.FONT_POP}`;
         return ctx.measureText(ch.c).width;
       });
-      const gap = size * 0.08;
+      const gap = size * 0.14;
       const total = widths.reduce((a, b) => a + b, 0) + gap * (chars.length - 1);
       let x = r.w / 2 - total / 2;
-      const fixedRot = [-0.04, 0.03, -0.02, 0.05, -0.03, 0.035];
+      const fixedRot = [-0.06, 0.045, -0.03, 0.07, -0.045, 0.05];
       chars.forEach((ch, i) => {
         const cxx = x + widths[i] / 2;
-        const bounce = Math.sin(tNow * 2.2 + i * 0.9) * size * 0.045;
-        const rot = Math.sin(tNow * 1.5 + i * 1.3) * 0.04 + fixedRot[i];
+        const bounce = Math.sin(tNow * 2.2 + i * 0.9) * size * 0.06;
+        const rot = Math.sin(tNow * 1.5 + i * 1.3) * 0.05 + fixedRot[i];
         ctx.save();
         ctx.translate(cxx, cy + bounce);
         ctx.rotate(rot);
         ctx.font = `${Math.round(size * ch.s)}px ${r.FONT_POP}`;
         ctx.lineJoin = 'round';
-        ctx.lineWidth = size * 0.24;
-        ctx.strokeStyle = '#38204e';
+        // 落ち影
+        ctx.fillStyle = 'rgba(30,15,45,0.4)';
+        ctx.fillText(ch.c, size * 0.045, size * 0.06);
+        // ぷくぷくステッカー風: 太い紫 → 白いふち → 色
+        ctx.lineWidth = size * 0.38;
+        ctx.strokeStyle = '#4a2a66';
         ctx.strokeText(ch.c, 0, 0);
-        ctx.lineWidth = size * 0.1;
-        ctx.strokeStyle = '#8a5aa2';
+        ctx.lineWidth = size * 0.2;
+        ctx.strokeStyle = '#ffffff';
         ctx.strokeText(ch.c, 0, 0);
         ctx.fillStyle = ch.col;
         ctx.fillText(ch.c, 0, 0);
+        // つやハイライト
+        ctx.globalAlpha = 0.35;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(ch.c, -size * 0.015, -size * 0.03);
+        ctx.globalAlpha = 1;
         ctx.restore();
         x += widths[i] + gap;
       });

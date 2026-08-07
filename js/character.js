@@ -18,6 +18,10 @@ window.MB = window.MB || {};
     mouthPos: { x: 0, y: 0 },
     eatenCount: 0,
 
+    eatBurst: 0,      // 食べた直後の仕事スパート
+    munchCombo: 0,
+    lastMunchT: 0,
+
     reset() {
       this.mood = 'idle';
       this.flying = [];
@@ -25,6 +29,8 @@ window.MB = window.MB || {};
       this.cheek = 0;
       this.eatenCount = 0;
       this.zzz = 0;
+      this.eatBurst = 0;
+      this.munchCombo = 0;
     },
 
     // マシュマロを口へ飛ばす（fromは画面座標）
@@ -41,9 +47,11 @@ window.MB = window.MB || {};
     },
 
     update(dt) {
-      const speed = this.mood === 'mach' ? 26 : this.mood === 'flow' ? 15 :
-                    this.mood === 'sleepy' ? 3 : this.mood === 'ko' ? 0 : 8;
-      this.typePhase += dt * speed;
+      const base = this.mood === 'mach' ? 26 : this.mood === 'flow' ? 15 :
+                   this.mood === 'sleepy' ? 3 : this.mood === 'ko' ? 0 : 8;
+      // マシュマロを食べると仕事がスパートする
+      this.typePhase += dt * base * (1 + this.eatBurst);
+      if (this.eatBurst > 0) this.eatBurst = Math.max(0, this.eatBurst - dt * 0.7);
       this.bob += dt * (this.mood === 'mach' ? 6 : 2);
       this.monitorSpin += dt * (this.mood === 'mach' ? 3.2 : 1.1);
 
@@ -65,12 +73,21 @@ window.MB = window.MB || {};
       const arrived = this.flying.filter((f) => f.t >= f.dur);
       if (arrived.length) {
         this.flying = this.flying.filter((f) => f.t < f.dur);
+        const now = performance.now();
         for (const f of arrived) {
           this.munch = 1;
           this.cheek = Math.min(1, this.cheek + 0.34);
           this.eatenCount++;
-          if (MB.sfx && MB.audio.ctx) MB.sfx.munch();
-          if (MB.fx) MB.fx.crumbs(this.mouthPos.x, this.mouthPos.y, f.color);
+          // 続けて食べると「ぽぽぽぽーん」と音が駆け上がる
+          this.munchCombo = now - this.lastMunchT < 900 ? this.munchCombo + 1 : 1;
+          this.lastMunchT = now;
+          this.eatBurst = Math.min(2.2, this.eatBurst + 0.35);
+          if (MB.sfx && MB.audio.ctx) MB.sfx.munchPop(this.munchCombo);
+          if (MB.fx) {
+            MB.fx.crumbs(this.mouthPos.x, this.mouthPos.y, f.color);
+            MB.fx.text(this.mouthPos.x + MB.util.rand(-20, 20), this.mouthPos.y - 30,
+                       this.munchCombo % 2 ? '♪' : '❤', '#ff9ec6', 18);
+          }
         }
       }
     },
@@ -216,9 +233,9 @@ window.MB = window.MB || {};
 
       ctx.save();
 
-      // マッハ時のスピード線
-      if (mood === 'mach') {
-        ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+      // マッハ時・食べスパート時のスピード線
+      if (mood === 'mach' || this.eatBurst > 0.8) {
+        ctx.strokeStyle = mood === 'mach' ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.18)';
         ctx.lineWidth = 2 * s;
         for (let i = 0; i < 6; i++) {
           const ly = deskY - U.rand(20, 150) * s;

@@ -165,20 +165,20 @@ window.MB = window.MB || {};
       if (horizontal) {
         const ex = Math.max(x1, x2);           // 共有辺のx
         const cy = y1 + cell / 2;
-        const bw = cell * 0.5, bh = cell * 0.66;
-        U.rr(ctx, ex - bw / 2, cy - bh / 2, bw, bh, bh * 0.28);
+        const bw = cell * 0.62, bh = cell * 0.82;
+        U.rr(ctx, ex - bw / 2, cy - bh / 2, bw, bh, bh * 0.3);
         ctx.fill();
         // 下側にうっすら陰
         ctx.fillStyle = f.shade;
         ctx.globalAlpha = 0.35;
-        U.rr(ctx, ex - bw / 2, cy + bh * 0.16, bw, bh * 0.3, bh * 0.15);
+        U.rr(ctx, ex - bw / 2, cy + bh * 0.18, bw, bh * 0.3, bh * 0.15);
         ctx.fill();
         ctx.globalAlpha = 1;
       } else {
         const ey = Math.max(y1, y2);
         const cx = x1 + cell / 2;
-        const bw = cell * 0.66, bh = cell * 0.5;
-        U.rr(ctx, cx - bw / 2, ey - bh / 2, bw, bh, bw * 0.28);
+        const bw = cell * 0.82, bh = cell * 0.62;
+        U.rr(ctx, cx - bw / 2, ey - bh / 2, bw, bh, bw * 0.3);
         ctx.fill();
       }
     },
@@ -539,6 +539,55 @@ window.MB = window.MB || {};
       // フィールド背景（スポーン領域は少し明るく）
       ctx.fillStyle = pal.fieldBg;
       ctx.fillRect(f.x, wy, f.w, f.h + topPad);
+      // ポップな背景: ゆっくり流れる水玉 ＋ マロくんの透かし
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(f.x, wy, f.w, f.h + topPad);
+      ctx.clip();
+      const bgT = performance.now() / 1000;
+      const sp = cell * 1.15;
+      const ox = (bgT * 7) % (sp * 2);
+      const oy = (bgT * 4.5) % (sp * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.05)';
+      for (let iy = -2; iy * sp < f.h + topPad + sp * 2; iy++) {
+        for (let ix = -2; ix * sp < f.w + sp * 2; ix++) {
+          const dx = f.x + ix * sp + ox;
+          const dy = wy + iy * sp + oy;
+          const big = (ix + iy) % 2 === 0;
+          ctx.beginPath();
+          ctx.arc(dx, dy, big ? cell * 0.1 : cell * 0.055, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      // マロくんの顔の透かし
+      const wcx = f.x + f.w / 2, wcy = f.y + f.h * 0.52;
+      const wr = f.h * 0.3;
+      ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+      ctx.lineWidth = Math.max(3, cell * 0.11);
+      ctx.beginPath();
+      ctx.ellipse(wcx, wcy, wr * 1.05, wr, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      const gr2 = wr * 0.34;
+      ctx.beginPath();
+      ctx.ellipse(wcx - wr * 0.38, wcy - wr * 0.05, gr2, gr2 * 0.9, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.ellipse(wcx + wr * 0.38, wcy - wr * 0.05, gr2, gr2 * 0.9, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(wcx - wr * 0.38 + gr2, wcy - wr * 0.05);
+      ctx.lineTo(wcx + wr * 0.38 - gr2, wcy - wr * 0.05);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(wcx, wcy + wr * 0.45, wr * 0.18, 0.15 * Math.PI, 0.85 * Math.PI);
+      ctx.stroke();
+      // 中央がほんのり明るいビネット
+      const vg = ctx.createRadialGradient(wcx, wcy, wr * 0.2, wcx, wcy, f.w * 0.7);
+      vg.addColorStop(0, 'rgba(255,240,250,0.04)');
+      vg.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = vg;
+      ctx.fillRect(f.x, wy, f.w, f.h + topPad);
+      ctx.restore();
       ctx.fillStyle = 'rgba(255,255,255,0.035)';
       ctx.fillRect(f.x, wy, f.w, topPad);
       // 限界ライン（ここより上に積むとビルド失敗）
@@ -919,6 +968,15 @@ window.MB = window.MB || {};
       };
       const bt = game.input.touchButtons;
       for (const b of bt) drawBtn(b.x, b.y, b.label, b.pressed);
+      // ボタンの説明ラベル
+      const caps = { left: 'いどう', right: 'いどう', soft: 'ゆっくり', rotate: 'まわす', hard: 'ストン' };
+      ctx.font = `bold ${Math.round(s * 0.2)}px ${this.FONT}`;
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      ctx.textAlign = 'center';
+      for (const b of bt) {
+        ctx.fillText(caps[b.id], b.x + s / 2, b.y + s + s * 0.26);
+      }
+      ctx.textAlign = 'left';
     },
 
     // メイン描画（PLAY中）

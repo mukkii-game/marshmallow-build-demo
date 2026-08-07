@@ -123,6 +123,48 @@ window.MB = window.MB || {};
               C5: 523.25, D5: 587.33, E5: 659.25, F5: 698.46, G5: 783.99, A5: 880, B5: 987.77,
               C6: 1046.5, D6: 1174.66, E6: 1318.5, G6: 1567.98, A6: 1760, C7: 2093 };
 
+  // 「ぽよん」: 周波数がびよんと揺れて戻る
+  function boing({ f0 = 340, t = 0, dur = 0.22, gain = 0.15 }) {
+    const c = ctx();
+    if (!c) return;
+    const t0 = c.currentTime + t;
+    const o = c.createOscillator();
+    const g = c.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(f0, t0);
+    o.frequency.exponentialRampToValueAtTime(f0 * 0.45, t0 + dur * 0.3);
+    o.frequency.exponentialRampToValueAtTime(f0 * 0.72, t0 + dur * 0.55);
+    o.frequency.exponentialRampToValueAtTime(f0 * 0.5, t0 + dur * 0.8);
+    o.frequency.exponentialRampToValueAtTime(f0 * 0.58, t0 + dur);
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(gain, t0 + 0.008);
+    g.gain.setTargetAtTime(0, t0 + dur * 0.5, dur / 3);
+    o.connect(g).connect(bus());
+    o.start(t0);
+    o.stop(t0 + dur + 0.1);
+  }
+
+  // 「ぽんっ」: 泡がはじけるようなポップ
+  function pon({ freq = 500, t = 0, dur = 0.1, gain = 0.15 }) {
+    const c = ctx();
+    if (!c) return;
+    const t0 = c.currentTime + t;
+    const o = c.createOscillator();
+    const g = c.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(freq * 1.25, t0);
+    o.frequency.exponentialRampToValueAtTime(freq * 0.8, t0 + dur);
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(gain, t0 + 0.006);
+    g.gain.setTargetAtTime(0, t0 + 0.015, dur / 2.5);
+    o.connect(g).connect(bus());
+    o.start(t0);
+    o.stop(t0 + dur + 0.08);
+    noise({ t, dur: 0.03, gain: gain * 0.25, freq: freq * 4, q: 1.6 });
+  }
+  sfx._pon = pon;
+  sfx._boing = boing;
+
   sfx.move = () => pluck({ freq: N.A5, gain: 0.05 });
   sfx.rotate = () => {
     pluck({ freq: N.D5, gain: 0.07 });
@@ -130,35 +172,36 @@ window.MB = window.MB || {};
   };
   sfx.softDrop = () => tone({ type: 'sine', freq: 300, dur: 0.03, gain: 0.04 });
 
-  // 接地: やわらか「ぽふっ」
+  // 接地: 「ぽよんっ」
   sfx.place = () => {
-    tone({ type: 'sine', freq: 150, freqEnd: 82, dur: 0.13, gain: 0.15, attack: 0.008 });
-    noise({ dur: 0.09, gain: 0.06, freq: 650, freqEnd: 220, type: 'lowpass' });
+    boing({ f0: 300, dur: 0.2, gain: 0.14 });
+    noise({ dur: 0.06, gain: 0.045, freq: 550, freqEnd: 220, type: 'lowpass' });
   };
 
   sfx.hardDrop = () => {
-    tone({ type: 'sine', freq: 210, freqEnd: 62, dur: 0.18, gain: 0.2, attack: 0.006 });
-    noise({ dur: 0.1, gain: 0.08, freq: 900, freqEnd: 200, type: 'lowpass' });
+    boing({ f0: 230, dur: 0.26, gain: 0.19 });
+    tone({ type: 'sine', freq: 130, freqEnd: 58, dur: 0.14, gain: 0.14, attack: 0.006 });
   };
 
-  // 回収ポップ: ペンタトニックのベルが駆け上がる
+  // 回収ポップ: ぽんっが駆け上がる
   const POP_SCALE = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24];
   sfx.pop = (i) => {
     const semis = POP_SCALE[Math.min(i, POP_SCALE.length - 1)];
-    bell({ freq: N.E5 * Math.pow(2, semis / 12), dur: 0.35, gain: 0.12 });
+    pon({ freq: N.E5 * Math.pow(2, semis / 12), gain: 0.12 });
   };
 
-  // まとめて確定: Cadd9のベルアルペジオ（数が多いほど豪華）
+  // まとめて確定: 「ぽ ぽ ぽ ぽーん！」
   sfx.groupClear = (n) => {
-    const notes = [N.C5, N.E5, N.G5, N.D6, N.C6, N.E6];
-    const count = Math.min(notes.length, 2 + n);
+    const scale = [0, 4, 7, 12, 16, 19];
+    const count = Math.min(scale.length, 2 + n);
     for (let i = 0; i < count; i++) {
-      bell({ freq: notes[i], t: i * 0.055, dur: 0.55, gain: 0.13 });
+      pon({ freq: N.C5 * Math.pow(2, scale[i] / 12), t: i * 0.07, gain: 0.15 });
     }
-    if (n >= 3) {
-      bell({ freq: N.G6, t: count * 0.055 + 0.05, dur: 0.9, gain: 0.11 });
-      noise({ dur: 0.35, gain: 0.045, freq: 6000, q: 0.6, type: 'highpass', t: 0.1 });
-    }
+    // 最後のぽーん（ベルの余韻つき）
+    const top = N.C5 * Math.pow(2, scale[count - 1] / 12) * 1.5;
+    pon({ freq: top, t: count * 0.07 + 0.03, dur: 0.22, gain: 0.17 });
+    bell({ freq: top, t: count * 0.07 + 0.03, dur: 0.8, gain: 0.09 });
+    if (n >= 3) noise({ dur: 0.35, gain: 0.05, freq: 6000, q: 0.6, type: 'highpass', t: 0.15 });
   };
 
   // S連鎖: きらきらグリッサンド
@@ -171,12 +214,14 @@ window.MB = window.MB || {};
     noise({ dur: 0.5, gain: 0.05, freq: 7000, q: 0.5, type: 'highpass', t: 0.05 });
   };
 
-  // もぐもぐ: ぷにっとした2連ブリップ
-  sfx.munch = () => {
-    tone({ type: 'sine', freq: 330, freqEnd: 210, dur: 0.05, gain: 0.09, attack: 0.005 });
-    tone({ type: 'sine', freq: 290, freqEnd: 180, t: 0.06, dur: 0.05, gain: 0.07, attack: 0.005 });
-    noise({ dur: 0.05, gain: 0.05, freq: 500, q: 1.2, freqEnd: 300, type: 'bandpass' });
+  // もぐもぐ: たべるたびに「ぽむっ」が高くなっていく（コンボで駆け上がる）
+  const MUNCH_SCALE = [0, 4, 7, 12, 16, 19, 24, 28];
+  sfx.munchPop = (combo) => {
+    const semis = MUNCH_SCALE[Math.min(combo - 1, MUNCH_SCALE.length - 1)];
+    pon({ freq: 392 * Math.pow(2, semis / 12), dur: 0.12, gain: 0.13 });
+    noise({ dur: 0.04, gain: 0.04, freq: 450, q: 1.2, freqEnd: 280, type: 'bandpass' });
   };
+  sfx.munch = () => sfx.munchPop(1);
 
   sfx.gaugeUp = () => bell({ freq: N.B5, dur: 0.25, gain: 0.06 });
 

@@ -42,22 +42,26 @@ window.MB = window.MB || {};
       this.mach = !!mach;
     },
 
-    startStage(stage, bpmOverride) {
+    // preferTheme: 設定「マシュマロのうた」でテーマ曲を全ステージ通しで流す
+    startStage(stage, bpmOverride, preferTheme) {
       const c = MB.audio.ensure();
-      this.stopTheme();
       this.cfg = stage.music;
-      this.bpm = bpmOverride || stage.bpm;
       this.sweepMeasures = stage.sweepMeasures || 2;
-      if (stage.useTheme && this.themeReady) {
+      const wantTheme = (preferTheme || stage.useTheme) && this.themeReady;
+      if (wantTheme) {
         this.mode = 'theme';
         this.bpm = MB.THEME_SYNC.bpm;
         const a = this.themeAudio;
         a.loop = true;
         this.themeBase = 0.8;
         a.volume = this.themeBase * MB.audio.volume;
-        a.currentTime = 0;
-        a.play().catch(() => { this.startGenerative(c); });
+        if (a.paused) {
+          a.currentTime = 0;
+          a.play().catch(() => { this.startGenerative(c); });
+        } // 再生中ならそのまま続ける（シームレス）
       } else {
+        this.stopTheme();
+        this.bpm = bpmOverride || stage.bpm;
         this.startGenerative(c);
       }
       this.started = true;

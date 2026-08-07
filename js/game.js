@@ -164,8 +164,6 @@ window.MB = window.MB || {};
     beginPlay() {
       this.setState(S.PLAY);
       MB.music.startStage(this.stage, null, this.data.music === 'theme');
-      // 最初のステージでは操作ヒントを表示
-      this.hintT = (this.mode === 'story' && this.stageIndex === 0) || this.mode === 'endless' ? 11 : 0;
       this.field.spawnDelayed = false;
       this.spawnNext();
     },
@@ -524,7 +522,6 @@ window.MB = window.MB || {};
         this.drawEnding(ctx, r);
       } else {
         r.drawGame(this);
-        if (st === S.PLAY && this.hintT > 0) this.drawHint(ctx, r);
         if (st === S.STAGE_INTRO) this.drawStageIntro(ctx, r);
         else if (st === S.PAUSE) this.drawPause(ctx, r);
         else if (st === S.STAGE_CLEAR) this.drawStageClear(ctx, r);

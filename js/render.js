@@ -737,9 +737,11 @@ window.MB = window.MB || {};
           const px = f.x + x * cell, py = f.y + y * cell;
           const sq = MB.draw.squash(cd);
           const rot = (((x * 13 + y * 7) % 9) - 4) * 0.014;
+          // 拍に合わせてぷるっと拡縮（下をずらしてぷにぷに感）
+          const bp = 1 + 0.03 * (this.beatNow || 0);
           MB.draw.marshmallow(ctx, px, py, cell, cd.color, {
             s: cd.s, sweeping: cd.sweeping, noFace: true,
-            marked: cd.marked, sx: sq.sx, sy: sq.sy, rot,
+            marked: cd.marked, sx: sq.sx * bp, sy: sq.sy * bp, rot,
           });
         }
       }
@@ -922,10 +924,14 @@ window.MB = window.MB || {};
     drawMiniPiece(pc, x, y, cell) {
       const ctx = this.ctx;
       const offs = pc.offsets ? pc.offsets() : [[0, 0], [1, 0], [0, 1], [1, 1]];
-      const scale = pc.kind === 'bar' ? 0.72 : 1; // のっぽは縮めて枠に収める
+      // 形の大きさに合わせて2x2の枠へおさめる
+      let w = 1, h = 1;
+      for (const [dx, dy] of offs) { w = Math.max(w, dx + 1); h = Math.max(h, dy + 1); }
+      const s2 = cell * (2 / Math.max(2, w, h));
+      const ox = x + (2 * cell - w * s2) / 2;
+      const oy = y + (2 * cell - h * s2) / 2;
       offs.forEach(([dx, dy], i) => {
-        MB.draw.marshmallow(ctx, x + dx * cell * scale + (pc.kind === 'bar' ? cell * 0.5 : 0),
-          y + dy * cell * scale, cell * scale, pc.cells[i].color, { s: pc.cells[i].s });
+        MB.draw.marshmallow(ctx, ox + dx * s2, oy + dy * s2, s2, pc.cells[i].color, { s: pc.cells[i].s });
       });
     },
 
@@ -1055,6 +1061,16 @@ window.MB = window.MB || {};
     drawGame(game) {
       const ctx = this.ctx;
       ctx.save();
+      // リズムに合わせて画面全体がわずかにバウンス
+      let beatPulse = 0;
+      if (MB.music.started && (game.state === MB.STATE.PLAY || game.state === MB.STATE.PAUSE)) {
+        beatPulse = Math.pow(MB.music.getBeatPulse(), 2.5);
+        const k = 1 + 0.006 * beatPulse;
+        ctx.translate(this.w / 2, this.h / 2);
+        ctx.scale(k, k);
+        ctx.translate(-this.w / 2, -this.h / 2);
+      }
+      this.beatNow = beatPulse;
       // 画面シェイク
       if (MB.fx.shakeT > 0) {
         const a = MB.fx.shakeT / 0.3 * MB.fx.shakeAmp;

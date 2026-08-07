@@ -5,26 +5,35 @@ window.MB = window.MB || {};
   const C = MB.C;
 
   // ---- ピース ----
-  // quad: 2x2マシュマロ（cells: 0=左上 1=右上 2=左下 3=右下）
-  // bar : のっぽマシュマロ（縦1x3、回転で横3x1・単色）
+  // quad  : 2x2マシュマロ（cells: 0=左上 1=右上 2=左下 3=右下）
+  // bar   : のっぽマシュマロ（縦1xN、回転で横Nx1・単色。N=2か3）
+  // single: ひとつぶマシュマロ
   class Piece {
-    constructor(cells, kind) {
+    constructor(cells, kind, len) {
       this.cells = cells; // [{color, s}]
       this.kind = kind || 'quad';
+      this.len = len || (this.kind === 'bar' ? 3 : 1);
       this.orient = 0;    // barのみ: 0=縦 1=横
       this.x = C.SPAWN_X;
       this.y = -2;
     }
     offsets() {
       if (this.kind === 'bar') {
-        return this.orient === 0
-          ? [[0, 0], [0, 1], [0, 2]]
-          : [[0, 0], [1, 0], [2, 0]];
+        const o = [];
+        for (let i = 0; i < this.len; i++) o.push(this.orient === 0 ? [0, i] : [i, 0]);
+        return o;
       }
+      if (this.kind === 'single') return [[0, 0]];
       return [[0, 0], [1, 0], [0, 1], [1, 1]];
     }
-    width() { return this.kind === 'bar' ? (this.orient === 0 ? 1 : 3) : 2; }
-    height() { return this.kind === 'bar' ? (this.orient === 0 ? 3 : 1) : 2; }
+    width() {
+      if (this.kind === 'bar') return this.orient === 0 ? 1 : this.len;
+      return this.kind === 'single' ? 1 : 2;
+    }
+    height() {
+      if (this.kind === 'bar') return this.orient === 0 ? this.len : 1;
+      return this.kind === 'single' ? 1 : 2;
+    }
     rotate(dir) {
       const c = this.cells;
       if (dir > 0) { // 時計回り: TL->TR->BR->BL->TL
@@ -41,11 +50,18 @@ window.MB = window.MB || {};
       this.barCountdown = MB.util.randInt(C.BAR_INTERVAL_MIN, C.BAR_INTERVAL_MAX);
     }
     next() {
-      // ときどき「のっぽマシュマロ」（単色の棒）
+      // ときどき珍しい形（ひとつぶ／2個棒／のっぽ3個棒）
       if (--this.barCountdown <= 0) {
         this.barCountdown = MB.util.randInt(C.BAR_INTERVAL_MIN, C.BAR_INTERVAL_MAX);
         const col = Math.random() < 0.5 ? C.WHITE : C.PINK;
-        return new Piece([{ color: col, s: false }, { color: col, s: false }, { color: col, s: false }], 'bar');
+        const r2 = Math.random();
+        if (r2 < 0.28) {
+          return new Piece([{ color: col, s: false }], 'single');
+        }
+        const len = r2 < 0.66 ? 2 : 3;
+        const cells2 = [];
+        for (let i = 0; i < len; i++) cells2.push({ color: col, s: false });
+        return new Piece(cells2, 'bar', len);
       }
       const r = Math.random();
       const A = Math.random() < 0.5 ? C.WHITE : C.PINK;
@@ -140,6 +156,7 @@ window.MB = window.MB || {};
     tryRotate(dir) {
       const p = this.piece;
       if (!p) return false;
+      if (p.kind === 'single') return true; // ひとつぶは回すとうれしい音だけ
       if (p.kind === 'bar') {
         // 縦⇔横。壁や積みに当たるときは少しずらして試す（壁蹴り）
         const oldOrient = p.orient, oldX = p.x, oldY = p.y;

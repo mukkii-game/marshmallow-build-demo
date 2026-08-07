@@ -156,29 +156,50 @@ window.MB = window.MB || {};
       return { fill: white ? '#fdf5ec' : '#ffc9dc', shade: white ? '#e3d2c2' : '#ea9dbd' };
     },
 
-    // となり同士のマシュマロを「むにっ」とつなぐブリッジ
+    // となり同士のマシュマロを「もち」のようにつなぐ（中央がくびれた曲線）
     // (x1,y1)-(x2,y2) はセル左上のピクセル座標（縦横いずれか隣接）
     bridge(ctx, x1, y1, x2, y2, cell, color, sweeping) {
       const f = this.fillFor(color, sweeping);
       const horizontal = Math.abs(x2 - x1) > Math.abs(y2 - y1);
       ctx.fillStyle = f.fill;
       if (horizontal) {
-        const ex = Math.max(x1, x2);           // 共有辺のx
+        const ex = Math.max(x1, x2);       // 共有辺のx
         const cy = y1 + cell / 2;
-        const bw = cell * 0.62, bh = cell * 0.82;
-        U.rr(ctx, ex - bw / 2, cy - bh / 2, bw, bh, bh * 0.3);
+        const attach = cell * 0.43;        // 本体に接する部分の半分の高さ
+        const span = cell * 0.52;          // 左右にどこまで食い込むか
+        const neckT = cell * 0.26;         // 上のくびれ（きつめ）
+        const neckB = cell * 0.36;         // 下のくびれ（ゆるめ＝もちの垂れ）
+        const lx = ex - span, rx = ex + span;
+        ctx.beginPath();
+        ctx.moveTo(lx, cy - attach);
+        ctx.quadraticCurveTo(ex, cy - neckT, rx, cy - attach);
+        ctx.lineTo(rx, cy + attach);
+        ctx.quadraticCurveTo(ex, cy + neckB, lx, cy + attach);
+        ctx.closePath();
         ctx.fill();
-        // 下側にうっすら陰
+        // くびれの下側にうっすら陰
         ctx.fillStyle = f.shade;
-        ctx.globalAlpha = 0.35;
-        U.rr(ctx, ex - bw / 2, cy + bh * 0.18, bw, bh * 0.3, bh * 0.15);
+        ctx.globalAlpha = 0.3;
+        ctx.beginPath();
+        ctx.moveTo(lx + span * 0.25, cy + attach * 0.5);
+        ctx.quadraticCurveTo(ex, cy + neckB * 0.92, rx - span * 0.25, cy + attach * 0.5);
+        ctx.quadraticCurveTo(ex, cy + attach * 0.98, lx + span * 0.25, cy + attach * 0.5);
+        ctx.closePath();
         ctx.fill();
         ctx.globalAlpha = 1;
       } else {
-        const ey = Math.max(y1, y2);
+        const ey = Math.max(y1, y2);       // 共有辺のy
         const cx = x1 + cell / 2;
-        const bw = cell * 0.82, bh = cell * 0.62;
-        U.rr(ctx, cx - bw / 2, ey - bh / 2, bw, bh, bw * 0.3);
+        const attach = cell * 0.43;
+        const span = cell * 0.52;
+        const neck = cell * 0.28;
+        const ty = ey - span, by = ey + span;
+        ctx.beginPath();
+        ctx.moveTo(cx - attach, ty);
+        ctx.quadraticCurveTo(cx - neck, ey, cx - attach, by);
+        ctx.lineTo(cx + attach, by);
+        ctx.quadraticCurveTo(cx + neck, ey, cx + attach, ty);
+        ctx.closePath();
         ctx.fill();
       }
     },

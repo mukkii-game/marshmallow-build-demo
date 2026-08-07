@@ -9,7 +9,7 @@ window.MB = window.MB || {};
 MB.STAGES = [
   {
     id: 1, time: '19:00', name: '定時のあと',
-    bpm: 96, sweepMeasures: 2, gravityMs: 1050, quota: 12,
+    bpm: 96, sweepMeasures: 2, gravityMs: 1450, quota: 12,
     palette: {
       skyTop: '#4a3b78', skyBot: '#ff9a5c', city: '#2a2240',
       accent: '#ffd9a0', fieldBg: 'rgba(20,16,38,0.82)', frame: '#ffe9d4',
@@ -26,7 +26,7 @@ MB.STAGES = [
   },
   {
     id: 2, time: '22:00', name: 'ノッてきた',
-    bpm: 112, sweepMeasures: 2, gravityMs: 820, quota: 17,
+    bpm: 112, sweepMeasures: 2, gravityMs: 1150, quota: 17,
     palette: {
       skyTop: '#131b3a', skyBot: '#3a4a8c', city: '#0d1228',
       accent: '#7fd4ff', fieldBg: 'rgba(10,14,34,0.84)', frame: '#cfe9ff',
@@ -43,7 +43,7 @@ MB.STAGES = [
   },
   {
     id: 3, time: '25:00', name: '深夜のゾーン',
-    bpm: 126, sweepMeasures: 2, gravityMs: 700, quota: 21,
+    bpm: 126, sweepMeasures: 2, gravityMs: 950, quota: 21,
     palette: {
       skyTop: '#07071e', skyBot: '#341b5e', city: '#0a0620',
       accent: '#b48cff', fieldBg: 'rgba(12,8,30,0.86)', frame: '#d9c8ff',
@@ -60,7 +60,7 @@ MB.STAGES = [
   },
   {
     id: 4, time: '27:00', name: '眠気の谷',
-    bpm: 134, sweepMeasures: 2, gravityMs: 620, quota: 26,
+    bpm: 134, sweepMeasures: 2, gravityMs: 820, quota: 26,
     palette: {
       skyTop: '#1a1030', skyBot: '#123a38', city: '#0c0a1e',
       accent: '#6cf0c8', fieldBg: 'rgba(8,14,24,0.86)', frame: '#c8f5e6',
@@ -77,7 +77,7 @@ MB.STAGES = [
   },
   {
     id: 5, time: '28:30', name: '夜明け前、あとひとふんばり',
-    bpm: 110, sweepMeasures: 2, gravityMs: 560, quota: 30,
+    bpm: 110, sweepMeasures: 2, gravityMs: 720, quota: 30,
     useTheme: true, // テーマ曲を使用（読めない場合は下記パターンにフォールバック）
     palette: {
       skyTop: '#0e1330', skyBot: '#27406e', city: '#101830',

@@ -28,6 +28,17 @@ window.MB = window.MB || {};
       canvas.addEventListener('pointerup', (e) => this.onPointerUp(e));
       canvas.addEventListener('pointercancel', (e) => this.onPointerUp(e));
       canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+      // ホイールで回転
+      this.wheelAcc = 0;
+      canvas.addEventListener('wheel', (e) => {
+        if (!this.game || this.game.state !== MB.STATE.PLAY) return;
+        e.preventDefault();
+        this.wheelAcc += e.deltaY;
+        const TH = 40;
+        while (this.wheelAcc >= TH) { this.game.action('rotateCW'); this.wheelAcc -= TH; }
+        while (this.wheelAcc <= -TH) { this.game.action('rotateCCW'); this.wheelAcc += TH; }
+      }, { passive: false });
     },
 
     layoutButtons() {
@@ -114,6 +125,12 @@ window.MB = window.MB || {};
       const x = e.clientX, y = e.clientY;
       if (e.pointerType === 'touch') g.touchMode = true;
       MB.audio.ensure();
+
+      // 右クリック = ストン（ハードドロップ）
+      if (e.button === 2) {
+        if (g.state === MB.STATE.PLAY) g.action('hard');
+        return;
+      }
 
       // UIボタン（メニュー等）優先
       if (g.uiButtons && g.uiButtons.length) {

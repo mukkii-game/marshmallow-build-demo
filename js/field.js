@@ -189,9 +189,12 @@ window.MB = window.MB || {};
             } else {
               const now = performance.now();
               this.grid[ty][x] = { color: f.color, s: f.s, marked: false, sweeping: false, born: now };
-              // 下のマシュマロたちがぷにっと受け止める
+              // まわりのマシュマロがぷにっと受け止める（下2つ＋左右）
               for (let jy = ty + 1; jy < Math.min(ty + 3, C.ROWS); jy++) {
                 if (this.grid[jy][x]) this.grid[jy][x].jig = now;
+              }
+              for (const nx of [x - 1, x + 1]) {
+                if (nx >= 0 && nx < C.COLS && this.grid[ty][nx]) this.grid[ty][nx].jig = now;
               }
               placed.add(f);
               cap = ty - 1;

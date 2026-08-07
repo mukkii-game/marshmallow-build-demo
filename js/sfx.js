@@ -104,88 +104,122 @@ window.MB = window.MB || {};
     src.stop(t0 + dur + 0.05);
   }
 
-  sfx.move = () => tone({ type: 'sine', freq: 520, dur: 0.05, gain: 0.08 });
-  sfx.rotate = () => tone({ type: 'triangle', freq: 700, freqEnd: 880, dur: 0.07, gain: 0.1 });
-  sfx.softDrop = () => tone({ type: 'sine', freq: 300, dur: 0.03, gain: 0.05 });
+  // やわらかベル（サイン基音＋非整数倍音で「ぽーん」）
+  function bell({ freq = 660, t = 0, dur = 0.5, gain = 0.14, soft = false }) {
+    const c = ctx();
+    if (!c) return;
+    tone({ type: 'sine', freq, t, dur, gain, attack: soft ? 0.02 : 0.005, curve: 2.4 });
+    tone({ type: 'sine', freq: freq * 2.756, t, dur: dur * 0.4, gain: gain * 0.22, attack: 0.003 });
+    tone({ type: 'sine', freq: freq * 5.4, t, dur: dur * 0.18, gain: gain * 0.08, attack: 0.002 });
+  }
 
-  // 接地: ぽふっ
+  // ぽわんとした木琴風
+  function pluck({ freq = 440, t = 0, gain = 0.14 }) {
+    tone({ type: 'triangle', freq, t, dur: 0.22, gain, attack: 0.004, curve: 3 });
+    tone({ type: 'sine', freq: freq * 3, t, dur: 0.08, gain: gain * 0.25 });
+  }
+
+  const N = { C4: 261.63, D4: 293.66, E4: 329.63, F4: 349.23, G4: 392, A4: 440, B4: 493.88,
+              C5: 523.25, D5: 587.33, E5: 659.25, F5: 698.46, G5: 783.99, A5: 880, B5: 987.77,
+              C6: 1046.5, D6: 1174.66, E6: 1318.5, G6: 1567.98, A6: 1760, C7: 2093 };
+
+  sfx.move = () => pluck({ freq: N.A5, gain: 0.05 });
+  sfx.rotate = () => {
+    pluck({ freq: N.D5, gain: 0.07 });
+    pluck({ freq: N.G5, t: 0.03, gain: 0.06 });
+  };
+  sfx.softDrop = () => tone({ type: 'sine', freq: 300, dur: 0.03, gain: 0.04 });
+
+  // 接地: やわらか「ぽふっ」
   sfx.place = () => {
-    tone({ type: 'sine', freq: 180, freqEnd: 90, dur: 0.12, gain: 0.18 });
-    noise({ dur: 0.08, gain: 0.08, freq: 900, freqEnd: 300, type: 'lowpass' });
+    tone({ type: 'sine', freq: 150, freqEnd: 82, dur: 0.13, gain: 0.15, attack: 0.008 });
+    noise({ dur: 0.09, gain: 0.06, freq: 650, freqEnd: 220, type: 'lowpass' });
   };
 
   sfx.hardDrop = () => {
-    tone({ type: 'sine', freq: 260, freqEnd: 80, dur: 0.16, gain: 0.22 });
-    noise({ dur: 0.12, gain: 0.12, freq: 1200, freqEnd: 250, type: 'lowpass' });
+    tone({ type: 'sine', freq: 210, freqEnd: 62, dur: 0.18, gain: 0.2, attack: 0.006 });
+    noise({ dur: 0.1, gain: 0.08, freq: 900, freqEnd: 200, type: 'lowpass' });
   };
 
-  // 回収ポップ: グループ内 i 個目（音階が上がる）
+  // 回収ポップ: ペンタトニックのベルが駆け上がる
   const POP_SCALE = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24];
   sfx.pop = (i) => {
     const semis = POP_SCALE[Math.min(i, POP_SCALE.length - 1)];
-    const f = 660 * Math.pow(2, semis / 12);
-    tone({ type: 'triangle', freq: f, dur: 0.14, gain: 0.16 });
-    noise({ dur: 0.05, gain: 0.05, freq: f * 3, q: 2 });
+    bell({ freq: N.E5 * Math.pow(2, semis / 12), dur: 0.35, gain: 0.12 });
   };
 
-  // まとめて確定（正方形数に応じて豪華に）
+  // まとめて確定: Cadd9のベルアルペジオ（数が多いほど豪華）
   sfx.groupClear = (n) => {
-    const base = [523.25, 659.25, 783.99, 1046.5]; // C E G C
-    for (let i = 0; i < Math.min(4, 1 + n); i++) {
-      tone({ type: 'triangle', freq: base[i], t: i * 0.04, dur: 0.3, gain: 0.14 });
+    const notes = [N.C5, N.E5, N.G5, N.D6, N.C6, N.E6];
+    const count = Math.min(notes.length, 2 + n);
+    for (let i = 0; i < count; i++) {
+      bell({ freq: notes[i], t: i * 0.055, dur: 0.55, gain: 0.13 });
     }
-    if (n >= 3) tone({ type: 'sine', freq: 1318.5, t: 0.18, dur: 0.4, gain: 0.12 });
+    if (n >= 3) {
+      bell({ freq: N.G6, t: count * 0.055 + 0.05, dur: 0.9, gain: 0.11 });
+      noise({ dur: 0.35, gain: 0.045, freq: 6000, q: 0.6, type: 'highpass', t: 0.1 });
+    }
   };
 
-  // S連鎖: キラキラアルペジオ
+  // S連鎖: きらきらグリッサンド
   sfx.sChain = (cells) => {
-    const steps = Math.min(10, 3 + Math.floor(cells / 3));
+    const steps = Math.min(12, 4 + Math.floor(cells / 2));
+    const scale = [0, 4, 7, 12, 16, 19, 24];
     for (let i = 0; i < steps; i++) {
-      const f = 880 * Math.pow(2, [0, 3, 7, 10, 12][i % 5] / 12 + Math.floor(i / 5));
-      tone({ type: 'sine', freq: f, t: i * 0.05, dur: 0.2, gain: 0.1 });
+      bell({ freq: N.A5 * Math.pow(2, scale[i % scale.length] / 12 + Math.floor(i / scale.length)), t: i * 0.045, dur: 0.4, gain: 0.09 });
     }
+    noise({ dur: 0.5, gain: 0.05, freq: 7000, q: 0.5, type: 'highpass', t: 0.05 });
   };
 
-  // もぐもぐ
+  // もぐもぐ: ぷにっとした2連ブリップ
   sfx.munch = () => {
-    noise({ dur: 0.07, gain: 0.14, freq: 700, q: 0.8, freqEnd: 350, type: 'bandpass' });
-    tone({ type: 'sine', freq: 220, freqEnd: 160, dur: 0.06, gain: 0.07 });
+    tone({ type: 'sine', freq: 330, freqEnd: 210, dur: 0.05, gain: 0.09, attack: 0.005 });
+    tone({ type: 'sine', freq: 290, freqEnd: 180, t: 0.06, dur: 0.05, gain: 0.07, attack: 0.005 });
+    noise({ dur: 0.05, gain: 0.05, freq: 500, q: 1.2, freqEnd: 300, type: 'bandpass' });
   };
 
-  sfx.gaugeUp = () => tone({ type: 'sine', freq: 990, freqEnd: 1320, dur: 0.12, gain: 0.08 });
+  sfx.gaugeUp = () => bell({ freq: N.B5, dur: 0.25, gain: 0.06 });
 
-  // マッハタイム発動
+  // マッハタイム発動: ライザー→ベル和音＋サブドロップ
   sfx.machStart = () => {
-    noise({ dur: 0.5, gain: 0.12, freq: 400, freqEnd: 4000, type: 'bandpass', q: 3 });
-    const chord = [523.25, 659.25, 783.99, 987.77, 1174.66];
-    chord.forEach((f, i) => tone({ type: 'sawtooth', freq: f, t: 0.12 + i * 0.03, dur: 0.5, gain: 0.07 }));
+    noise({ dur: 0.45, gain: 0.1, freq: 500, freqEnd: 5000, type: 'bandpass', q: 2.5 });
+    tone({ type: 'sine', freq: 200, freqEnd: 55, t: 0.4, dur: 0.4, gain: 0.2 });
+    [N.C5, N.E5, N.G5, N.B5, N.D6].forEach((f, i) =>
+      bell({ freq: f, t: 0.38 + i * 0.045, dur: 1.0, gain: 0.12 }));
   };
 
   sfx.machEnd = () => {
-    tone({ type: 'triangle', freq: 880, freqEnd: 440, dur: 0.3, gain: 0.1 });
+    bell({ freq: N.G5, dur: 0.4, gain: 0.09, soft: true });
+    bell({ freq: N.C5, t: 0.14, dur: 0.6, gain: 0.09, soft: true });
   };
 
-  // ステージクリア: BUILD SUCCESS ジングル
+  // ステージクリア: 「おしごとかんりょう」ジングル
   sfx.stageClear = () => {
-    const seq = [[523.25, 0], [659.25, 0.09], [783.99, 0.18], [1046.5, 0.27], [1318.5, 0.42]];
-    for (const [f, t] of seq) tone({ type: 'triangle', freq: f, t, dur: 0.35, gain: 0.16 });
-    tone({ type: 'sine', freq: 2093, t: 0.42, dur: 0.6, gain: 0.08 });
+    const melody = [[N.C5, 0], [N.E5, 0.1], [N.G5, 0.2], [N.C6, 0.32], [N.A5, 0.5], [N.C6, 0.62], [N.E6, 0.76]];
+    for (const [f, t] of melody) bell({ freq: f, t, dur: 0.6, gain: 0.14 });
+    bell({ freq: N.G6, t: 0.96, dur: 1.4, gain: 0.12 });
+    // やわらかい和音の土台
+    [N.C4, N.E4, N.G4].forEach((f) =>
+      tone({ type: 'triangle', freq: f, t: 0.3, dur: 1.6, gain: 0.05, attack: 0.15, curve: 1.5 }));
   };
 
+  // やさしい残念ジングル（責めない音）
   sfx.gameOver = () => {
-    tone({ type: 'triangle', freq: 392, freqEnd: 370, t: 0, dur: 0.4, gain: 0.14 });
-    tone({ type: 'triangle', freq: 330, freqEnd: 300, t: 0.35, dur: 0.7, gain: 0.14 });
+    bell({ freq: N.E5, t: 0, dur: 0.5, gain: 0.11, soft: true });
+    bell({ freq: N.C5, t: 0.22, dur: 0.5, gain: 0.11, soft: true });
+    bell({ freq: N.A4, t: 0.44, dur: 0.9, gain: 0.11, soft: true });
+    tone({ type: 'triangle', freq: N.F4, t: 0.44, dur: 1.2, gain: 0.05, attack: 0.2 });
   };
 
-  sfx.danger = () => tone({ type: 'square', freq: 880, dur: 0.08, gain: 0.05 });
+  sfx.danger = () => pluck({ freq: N.A5, gain: 0.05 });
 
-  sfx.uiMove = () => tone({ type: 'sine', freq: 600, dur: 0.05, gain: 0.08 });
+  sfx.uiMove = () => pluck({ freq: N.G5, gain: 0.07 });
   sfx.uiSelect = () => {
-    tone({ type: 'triangle', freq: 660, dur: 0.1, gain: 0.12 });
-    tone({ type: 'triangle', freq: 990, t: 0.07, dur: 0.15, gain: 0.1 });
+    bell({ freq: N.G5, dur: 0.25, gain: 0.1 });
+    bell({ freq: N.C6, t: 0.07, dur: 0.4, gain: 0.1 });
   };
-  sfx.uiBack = () => tone({ type: 'triangle', freq: 440, freqEnd: 330, dur: 0.12, gain: 0.1 });
+  sfx.uiBack = () => pluck({ freq: N.D5, gain: 0.08 });
 
-  sfx.countTick = () => tone({ type: 'sine', freq: 880, dur: 0.08, gain: 0.12 });
-  sfx.countGo = () => tone({ type: 'sine', freq: 1760, dur: 0.3, gain: 0.14 });
+  sfx.countTick = () => pluck({ freq: N.A5, gain: 0.1 });
+  sfx.countGo = () => bell({ freq: N.A6, dur: 0.5, gain: 0.13 });
 })();

@@ -171,6 +171,8 @@ window.MB = window.MB || {};
       const p = this.queue.shift();
       this.queue.push(this.gen.next());
       this.field.spawn(p);
+      this.pieceVisX = p.x;
+      this.pieceVisY = p.y;
     },
 
     // ---- 回収処理 ----
@@ -477,6 +479,17 @@ window.MB = window.MB || {};
         if (this.spawnDelay <= 0) this.spawnNext();
       }
 
+      // ピースのなめらか表示位置
+      if (this.field.piece) {
+        const p = this.field.piece;
+        if (this.pieceVisX == null) { this.pieceVisX = p.x; this.pieceVisY = p.y; }
+        this.pieceVisX += (p.x - this.pieceVisX) * Math.min(1, dt * 14);
+        this.pieceVisY += (p.y - this.pieceVisY) * Math.min(1, dt * 18);
+      } else {
+        this.pieceVisX = null;
+        this.pieceVisY = null;
+      }
+
       // タイムライン
       if (MB.music.started) {
         this.field.setSweep(MB.music.getSweepPhase());
@@ -536,7 +549,7 @@ window.MB = window.MB || {};
     },
 
     bigText(ctx, r, str, y, size, color) {
-      ctx.font = `bold ${size}px ${r.FONT}`;
+      ctx.font = `${size}px ${r.FONT_POP}`;
       ctx.textAlign = 'center';
       ctx.lineWidth = size * 0.16;
       ctx.strokeStyle = 'rgba(30,20,45,0.75)';
@@ -593,26 +606,22 @@ window.MB = window.MB || {};
       }
 
       const isMenu = this.state === S.MENU;
-      const cy = r.h * (isMenu ? 0.2 : 0.17);
+      const cy = r.h * (isMenu ? 0.18 : 0.16);
       // ロゴ
-      const logoSize = Math.min(r.w * 0.1, 76);
-      this.bigText(ctx, r, 'マシュとマロ', cy, logoSize, '#fff0f6');
-      ctx.font = `${Math.round(logoSize * 0.34)}px ${r.FONT}`;
-      ctx.textAlign = 'center';
-      ctx.fillStyle = '#ffd0e0';
-      ctx.fillText('まよなかの おしごとパズル', r.w / 2, cy + logoSize * 0.75);
-      ctx.textAlign = 'left';
+      const logoSize = Math.min(r.w * 0.115, 90);
+      this.drawLogo(ctx, r, cy, isMenu ? logoSize * 0.8 : logoSize);
 
       if (!isMenu) {
-        this.drawRulesPanel(ctx, r, r.h * 0.31);
+        this.drawRulesPanel(ctx, r, r.h * 0.27);
         if (Math.sin(tNow * 3.5) > -0.4) {
-          this.bigText(ctx, r, 'タップ / Enter で スタート', r.h * 0.79, Math.min(r.w * 0.032, 24), '#fff');
+          this.bigText(ctx, r, 'タップ / Enter で スタート', r.h * 0.77, Math.min(r.w * 0.032, 24), '#fff');
         }
-        ctx.font = `${Math.min(r.w * 0.022, 15)}px ${r.FONT}`;
+        ctx.font = `bold ${Math.min(r.w * 0.021, 15)}px ${r.FONT}`;
         ctx.textAlign = 'center';
-        ctx.fillStyle = 'rgba(255,255,255,0.55)';
-        ctx.fillText('← → いどう ／ ↑ Z X まわす ／ ↓ ゆっくり ／ Space ストン！ （マウスだけでもOK）', r.w / 2, r.h * 0.86);
-        ctx.fillText('ためしばん — おとが でます 🔊（みぎうえで おんりょう）', r.w / 2, r.h * 0.9);
+        ctx.fillStyle = 'rgba(255,255,255,0.6)';
+        ctx.fillText('🖱 マウスだけでOK： よこにドラッグ＝いどう ／ クリック・ホイール＝まわす ／ みぎクリック＝ストン！', r.w / 2, r.h * 0.84);
+        ctx.fillText('⌨ キーボード： ←→ いどう ／ ↑ Z X まわす ／ ↓ ゆっくり ／ Space ストン', r.w / 2, r.h * 0.885);
+        ctx.fillText('ためしばん — おとが でます 🔊（みぎうえで おんりょう）', r.w / 2, r.h * 0.93);
         ctx.textAlign = 'left';
       } else {
         // モード選択
@@ -630,6 +639,49 @@ window.MB = window.MB || {};
                      r.w / 2, r.h * 0.42 + bh * 2.35 + 24);
         ctx.textAlign = 'left';
       }
+    },
+
+    // 描き文字ロゴ『マシュとマロ』
+    drawLogo(ctx, r, cy, size) {
+      const chars = [
+        { c: 'マ', col: '#fff5ec', s: 1 },
+        { c: 'シ', col: '#ffc9dc', s: 1 },
+        { c: 'ュ', col: '#fff5ec', s: 0.9 },
+        { c: 'と', col: '#ffe28a', s: 0.6 },
+        { c: 'マ', col: '#ffc9dc', s: 1 },
+        { c: 'ロ', col: '#fff5ec', s: 1 },
+      ];
+      const tNow = performance.now() / 1000;
+      ctx.textAlign = 'center';
+      const widths = chars.map((ch) => {
+        ctx.font = `${Math.round(size * ch.s)}px ${r.FONT_POP}`;
+        return ctx.measureText(ch.c).width;
+      });
+      const gap = size * 0.08;
+      const total = widths.reduce((a, b) => a + b, 0) + gap * (chars.length - 1);
+      let x = r.w / 2 - total / 2;
+      const fixedRot = [-0.04, 0.03, -0.02, 0.05, -0.03, 0.035];
+      chars.forEach((ch, i) => {
+        const cxx = x + widths[i] / 2;
+        const bounce = Math.sin(tNow * 2.2 + i * 0.9) * size * 0.045;
+        const rot = Math.sin(tNow * 1.5 + i * 1.3) * 0.04 + fixedRot[i];
+        ctx.save();
+        ctx.translate(cxx, cy + bounce);
+        ctx.rotate(rot);
+        ctx.font = `${Math.round(size * ch.s)}px ${r.FONT_POP}`;
+        ctx.lineJoin = 'round';
+        ctx.lineWidth = size * 0.24;
+        ctx.strokeStyle = '#38204e';
+        ctx.strokeText(ch.c, 0, 0);
+        ctx.lineWidth = size * 0.1;
+        ctx.strokeStyle = '#8a5aa2';
+        ctx.strokeText(ch.c, 0, 0);
+        ctx.fillStyle = ch.col;
+        ctx.fillText(ch.c, 0, 0);
+        ctx.restore();
+        x += widths[i] + gap;
+      });
+      ctx.textAlign = 'left';
     },
 
     // タイトルのルールせつめい
@@ -659,7 +711,7 @@ window.MB = window.MB || {};
           for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
             MB.draw.marshmallow(ctx, icoX - m + dx * m, cy - m + dy * m, m, MB.C.PINK, {});
           }
-          return 'おなじ いろを ましかく（2×2）に そろえよう';
+          return 'おなじ いろを 4つ くっつけると おおきな マシュマロに！';
         },
         () => { // ラインが回収
           const cy = y0 + rowH * 1.5;

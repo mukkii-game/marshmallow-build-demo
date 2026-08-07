@@ -5,6 +5,13 @@
     const m = location.search.match(/size=(\d+)x(\d+)/);
     if (m) MB.DEBUG_SIZE = { w: +m[1], h: +m[2] };
 
+    // Webフォントの先読み（オフライン時はシステムフォントにフォールバック）
+    if (document.fonts && document.fonts.load) {
+      document.fonts.load('400 32px "Mochiy Pop One"');
+      document.fonts.load('700 16px "M PLUS Rounded 1c"');
+      document.fonts.load('800 16px "M PLUS Rounded 1c"');
+    }
+
     const canvas = document.getElementById('game');
     MB.render.init(canvas);
     MB.game.init(MB.input);

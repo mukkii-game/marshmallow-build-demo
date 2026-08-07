@@ -108,7 +108,7 @@ window.MB = window.MB || {};
       }
 
       // 予約マーク: ぷるぷる顔
-      if (opts.marked && !opts.sweeping) {
+      if (opts.marked && !opts.sweeping && !opts.noFace) {
         const ey = bs * -0.02;
         ctx.fillStyle = 'rgba(70,50,60,0.75)';
         ctx.beginPath();
@@ -145,6 +145,73 @@ window.MB = window.MB || {};
         ctx.textBaseline = 'alphabetic';
       }
       ctx.restore();
+    },
+
+    // 色と状態から塗り色を返す
+    fillFor(color, sweeping) {
+      const white = color === C.WHITE;
+      if (sweeping) {
+        return { fill: white ? '#fffef8' : '#ffe4ef', shade: white ? '#f5ecdf' : '#f8ccdd' };
+      }
+      return { fill: white ? '#fdf5ec' : '#ffc9dc', shade: white ? '#e3d2c2' : '#ea9dbd' };
+    },
+
+    // となり同士のマシュマロを「むにっ」とつなぐブリッジ
+    // (x1,y1)-(x2,y2) はセル左上のピクセル座標（縦横いずれか隣接）
+    bridge(ctx, x1, y1, x2, y2, cell, color, sweeping) {
+      const f = this.fillFor(color, sweeping);
+      const horizontal = Math.abs(x2 - x1) > Math.abs(y2 - y1);
+      ctx.fillStyle = f.fill;
+      if (horizontal) {
+        const ex = Math.max(x1, x2);           // 共有辺のx
+        const cy = y1 + cell / 2;
+        const bw = cell * 0.5, bh = cell * 0.66;
+        U.rr(ctx, ex - bw / 2, cy - bh / 2, bw, bh, bh * 0.28);
+        ctx.fill();
+        // 下側にうっすら陰
+        ctx.fillStyle = f.shade;
+        ctx.globalAlpha = 0.35;
+        U.rr(ctx, ex - bw / 2, cy + bh * 0.16, bw, bh * 0.3, bh * 0.15);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      } else {
+        const ey = Math.max(y1, y2);
+        const cx = x1 + cell / 2;
+        const bw = cell * 0.66, bh = cell * 0.5;
+        U.rr(ctx, cx - bw / 2, ey - bh / 2, bw, bh, bw * 0.28);
+        ctx.fill();
+      }
+    },
+
+    // にっこり顔（予約マシュマロ・キングマシュマロ用）
+    face(ctx, cx, cy, s, beat) {
+      const blink = beat != null && beat > 0.92;
+      ctx.fillStyle = 'rgba(70,50,60,0.8)';
+      if (blink) {
+        ctx.strokeStyle = 'rgba(70,50,60,0.8)';
+        ctx.lineWidth = Math.max(1.5, s * 0.05);
+        ctx.beginPath();
+        ctx.moveTo(cx - s * 0.22, cy);
+        ctx.lineTo(cx - s * 0.1, cy);
+        ctx.moveTo(cx + s * 0.1, cy);
+        ctx.lineTo(cx + s * 0.22, cy);
+        ctx.stroke();
+      } else {
+        ctx.beginPath();
+        ctx.ellipse(cx - s * 0.16, cy, s * 0.05, s * 0.07, 0, 0, Math.PI * 2);
+        ctx.ellipse(cx + s * 0.16, cy, s * 0.05, s * 0.07, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.strokeStyle = 'rgba(70,50,60,0.75)';
+      ctx.lineWidth = Math.max(1.5, s * 0.045);
+      ctx.beginPath();
+      ctx.arc(cx, cy + s * 0.1, s * 0.11, 0.15 * Math.PI, 0.85 * Math.PI);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(255,140,160,0.4)';
+      ctx.beginPath();
+      ctx.ellipse(cx - s * 0.3, cy + s * 0.13, s * 0.09, s * 0.055, 0, 0, Math.PI * 2);
+      ctx.ellipse(cx + s * 0.3, cy + s * 0.13, s * 0.09, s * 0.055, 0, 0, Math.PI * 2);
+      ctx.fill();
     },
   };
 
@@ -256,7 +323,8 @@ window.MB = window.MB || {};
 
   // ---- メインレンダラ ----
   MB.render = {
-    FONT: `'Segoe UI', 'Hiragino Maru Gothic ProN', 'Yu Gothic UI', 'Meiryo', sans-serif`,
+    FONT: `'M PLUS Rounded 1c', 'Hiragino Maru Gothic ProN', 'Yu Gothic UI', 'Meiryo', sans-serif`,
+    FONT_POP: `'Mochiy Pop One', 'M PLUS Rounded 1c', 'Hiragino Maru Gothic ProN', 'Yu Gothic UI', sans-serif`,
     canvas: null,
     ctx: null,
     w: 0, h: 0, dpr: 1,
@@ -509,30 +577,120 @@ window.MB = window.MB || {};
         ctx.fillRect(f.x, wy, f.w, topPad + cell * 2);
       }
 
-      // 置かれたマシュマロ
+      // ---- 置かれたマシュマロ（同色はむにっと融合、2×2はキングマシュマロ）----
+      const grid = field.grid;
+      // 予約領域（同色でつながった marked セル）を抽出
+      const compOf = {};
+      const comps = [];
       for (let y = 0; y < C.ROWS; y++) {
         for (let x = 0; x < C.COLS; x++) {
-          const cellData = field.grid[y][x];
-          if (!cellData) continue;
-          let px = f.x + x * cell, py = f.y + y * cell;
-          let size = cell;
-          if (cellData.marked && !cellData.sweeping) {
-            const pulse = 1 + 0.05 * beat;
-            const d = cell * (pulse - 1) / 2;
-            px -= d; py -= d; size = cell * pulse;
+          const cd = grid[y][x];
+          const key = y * C.COLS + x;
+          if (!cd || !cd.marked || cd.sweeping || compOf[key] !== undefined) continue;
+          const comp = { cells: [], color: cd.color, minX: x, minY: y, maxX: x, maxY: y, hasS: false };
+          const stack = [[x, y]];
+          compOf[key] = comps.length;
+          while (stack.length) {
+            const [sx2, sy2] = stack.pop();
+            const c2 = grid[sy2][sx2];
+            comp.cells.push([sx2, sy2]);
+            comp.minX = Math.min(comp.minX, sx2); comp.maxX = Math.max(comp.maxX, sx2);
+            comp.minY = Math.min(comp.minY, sy2); comp.maxY = Math.max(comp.maxY, sy2);
+            if (c2.s) comp.hasS = true;
+            for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+              const nx = sx2 + dx, ny = sy2 + dy;
+              if (nx < 0 || nx >= C.COLS || ny < 0 || ny >= C.ROWS) continue;
+              const nk = ny * C.COLS + nx;
+              const nc = grid[ny][nx];
+              if (nc && nc.marked && !nc.sweeping && nc.color === comp.color && compOf[nk] === undefined) {
+                compOf[nk] = comps.length;
+                stack.push([nx, ny]);
+              }
+            }
           }
-          const sq = MB.draw.squash(cellData);
-          const rot = (((x * 13 + y * 7) % 9) - 4) * 0.014; // 手置きっぽい微妙な傾き
-          MB.draw.marshmallow(ctx, px, py, size, cellData.color, {
-            s: cellData.s, marked: cellData.marked, sweeping: cellData.sweeping,
-            sx: sq.sx, sy: sq.sy, rot,
+          comp.isKing = comp.cells.length === 4 &&
+            (comp.maxX - comp.minX === 1) && (comp.maxY - comp.minY === 1);
+          comps.push(comp);
+        }
+      }
+      const inKing = (x, y) => {
+        const id = compOf[y * C.COLS + x];
+        return id !== undefined && comps[id].isKing;
+      };
+
+      // パスA: 個別マシュマロ（キング化した4つは飛ばす）
+      for (let y = 0; y < C.ROWS; y++) {
+        for (let x = 0; x < C.COLS; x++) {
+          const cd = grid[y][x];
+          if (!cd || inKing(x, y)) continue;
+          const px = f.x + x * cell, py = f.y + y * cell;
+          const sq = MB.draw.squash(cd);
+          const rot = (((x * 13 + y * 7) % 9) - 4) * 0.014;
+          MB.draw.marshmallow(ctx, px, py, cell, cd.color, {
+            s: cd.s, sweeping: cd.sweeping, noFace: true,
+            marked: cd.marked, sx: sq.sx, sy: sq.sy, rot,
           });
-          if (cellData.marked && !cellData.sweeping) {
-            ctx.strokeStyle = `rgba(255,235,150,${0.3 + 0.32 * beat})`;
-            ctx.lineWidth = 2.5;
-            U.rr(ctx, px + 1, py + 1, size - 2, size - 2, size * 0.4);
-            ctx.stroke();
+        }
+      }
+      // パスB: 同色・同状態の隣どうしをブリッジで融合
+      const stateOf = (cd) => cd.color * 4 + ((cd.marked && !cd.sweeping) ? 2 : 0) + (cd.sweeping ? 1 : 0);
+      for (let y = 0; y < C.ROWS; y++) {
+        for (let x = 0; x < C.COLS; x++) {
+          const cd = grid[y][x];
+          if (!cd || inKing(x, y)) continue;
+          const px = f.x + x * cell, py = f.y + y * cell;
+          const right = x + 1 < C.COLS ? grid[y][x + 1] : null;
+          if (right && !inKing(x + 1, y) && stateOf(right) === stateOf(cd)) {
+            MB.draw.bridge(ctx, px, py, px + cell, py, cell, cd.color, cd.sweeping);
           }
+          const down = y + 1 < C.ROWS ? grid[y + 1][x] : null;
+          if (down && !inKing(x, y + 1) && stateOf(down) === stateOf(cd)) {
+            MB.draw.bridge(ctx, px, py, px, py + cell, cell, cd.color, cd.sweeping);
+          }
+        }
+      }
+      // パスC: 予約領域の仕上げ（キングマシュマロ／領域の顔と光）
+      for (const comp of comps) {
+        const pulse = 1 + 0.04 * beat;
+        if (comp.isKing) {
+          const size = cell * 2 * pulse;
+          const px = f.x + comp.minX * cell - (size - cell * 2) / 2;
+          const py = f.y + comp.minY * cell - (size - cell * 2) / 2;
+          MB.draw.marshmallow(ctx, px, py, size, comp.color, { round: 0.36, noFace: true, marked: true });
+          const cx2 = px + size / 2, cy2 = py + size * 0.46;
+          MB.draw.face(ctx, cx2, cy2, size * 0.5, beat);
+          if (comp.hasS) {
+            ctx.fillStyle = '#ff5c96';
+            ctx.beginPath();
+            ctx.arc(px + size * 0.8, py + size * 0.22, size * 0.1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.font = `bold ${Math.round(size * 0.13)}px sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('S', px + size * 0.8, py + size * 0.23);
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'alphabetic';
+          }
+          ctx.strokeStyle = `rgba(255,235,150,${0.35 + 0.35 * beat})`;
+          ctx.lineWidth = 3;
+          U.rr(ctx, px + 2, py + 2, size - 4, size - 4, size * 0.33);
+          ctx.stroke();
+        } else {
+          // 大きな連結領域: 中央にひとつ顔、外周はほんのり光る
+          let cx2 = 0, cy2 = 0;
+          for (const [x, y] of comp.cells) {
+            cx2 += f.x + (x + 0.5) * cell;
+            cy2 += f.y + (y + 0.5) * cell;
+          }
+          cx2 /= comp.cells.length; cy2 /= comp.cells.length;
+          const fs = cell * Math.min(1.5, 0.95 + comp.cells.length * 0.05);
+          MB.draw.face(ctx, cx2, cy2, fs, beat);
+          ctx.strokeStyle = `rgba(255,235,150,${0.25 + 0.3 * beat})`;
+          ctx.lineWidth = 2.5;
+          const bx = f.x + comp.minX * cell, by = f.y + comp.minY * cell;
+          U.rr(ctx, bx + 2, by + 2, (comp.maxX - comp.minX + 1) * cell - 4, (comp.maxY - comp.minY + 1) * cell - 4, cell * 0.4);
+          ctx.stroke();
         }
       }
 
@@ -557,10 +715,25 @@ window.MB = window.MB || {};
           ctx.stroke();
           ctx.setLineDash([]);
         }
-        for (const [i, dx, dy] of [[0, 0, 0], [1, 1, 0], [2, 0, 1], [3, 1, 1]]) {
-          MB.draw.marshmallow(ctx, f.x + (p.x + dx) * cell, f.y + (p.y + dy) * cell, cell, p.cells[i].color, {
-            s: p.cells[i].s, rot: (i - 1.5) * 0.02,
+        // なめらか移動＋動きに合わせてぷるんと傾く
+        const vx = game.pieceVisX == null ? p.x : game.pieceVisX;
+        const vy = game.pieceVisY == null ? p.y : game.pieceVisY;
+        const wob = U.clamp((p.x - vx) * -0.2, -0.16, 0.16);
+        const cellPos = [[0, 0, 0], [1, 1, 0], [2, 0, 1], [3, 1, 1]];
+        for (const [i, dx, dy] of cellPos) {
+          MB.draw.marshmallow(ctx, f.x + (vx + dx) * cell, f.y + (vy + dy) * cell, cell, p.cells[i].color, {
+            s: p.cells[i].s, rot: wob + (i - 1.5) * 0.015,
           });
+        }
+        // ピース内の同色もむにっと融合
+        for (const [a, b] of [[0, 1], [2, 3], [0, 2], [1, 3]]) {
+          if (p.cells[a].color !== p.cells[b].color) continue;
+          const [, ax, ay] = cellPos[a];
+          const [, bx2, by2] = cellPos[b];
+          MB.draw.bridge(ctx,
+            f.x + (vx + ax) * cell, f.y + (vy + ay) * cell,
+            f.x + (vx + bx2) * cell, f.y + (vy + by2) * cell,
+            cell, p.cells[a].color, false);
         }
       }
 

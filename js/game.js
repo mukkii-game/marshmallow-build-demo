@@ -52,6 +52,7 @@ window.MB = window.MB || {};
       this.data = MB.util.load() || { bestStory: 0, bestEndless: 0, clearedStages: 0, volume: 0.5, music: 'theme' };
       if (this.data.volume == null) this.data.volume = this.data.muted ? 0 : 0.5; // 旧データ移行
       if (!this.data.music) this.data.music = 'theme'; // デフォルトはテーマ曲
+      if (!this.data.colors) this.data.colors = 'honey'; // 既定は色覚フレンドリーな白×はちみつ
       MB.audio.setVolume(this.data.volume);
       this.field.onClear = (r) => this.handleClear(r);
       this.field.onSweepMiss = () => this.handleSweepMiss();
@@ -386,6 +387,10 @@ window.MB = window.MB || {};
             else MB.music.stopTheme();
           }
           break;
+        case 'menu_colors':
+          this.data.colors = this.data.colors === 'honey' ? 'pink' : 'honey';
+          U.save(this.data);
+          break;
         case 'over_retry': this.retry(); break;
         case 'over_title': this.backToTitle(); break;
         case 'title_start': this.toMenu(); break;
@@ -678,14 +683,17 @@ window.MB = window.MB || {};
           ? (MB.music.themeReady ? '♪ おんがく: マシュマロのうた' : '♪ おんがく: マシュマロのうた（このばんには 入ってないよ）')
           : '♪ おんがく: じどうせいせいBGM';
         this.uiButton(ctx, r, 'menu_music', musLabel, r.w / 2, r.h * 0.4 + bh * 2.5, bw * 0.94, bh * 0.72);
+        // マシュマロのいろ（色覚フレンドリー切替）
+        const scheme = MB.SCHEMES[this.data.colors] || MB.SCHEMES.honey;
+        this.uiButton(ctx, r, 'menu_colors', `🎨 いろ: ${scheme.label}`, r.w / 2, r.h * 0.4 + bh * 3.32, bw * 0.94, bh * 0.72);
         ctx.font = `${Math.min(r.w * 0.024, 16)}px ${r.FONT}`;
         ctx.textAlign = 'center';
         ctx.fillStyle = 'rgba(255,255,255,0.7)';
         const cleared = this.data.clearedStages;
         ctx.fillText(cleared >= MB.STAGES.length ? '★ ものがたり クリアずみ！' : `おはなしの すすみ: ${cleared} / ${MB.STAGES.length}`,
-                     r.w / 2, r.h * 0.4 + bh * 3.5);
+                     r.w / 2, r.h * 0.4 + bh * 4.25);
         ctx.fillText(`ベスト: ものがたり ${U.fmtScore(this.data.bestStory)} ／ エンドレス ${U.fmtScore(this.data.bestEndless)}`,
-                     r.w / 2, r.h * 0.4 + bh * 3.5 + 24);
+                     r.w / 2, r.h * 0.4 + bh * 4.25 + 24);
         ctx.textAlign = 'left';
       }
     },

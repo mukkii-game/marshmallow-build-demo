@@ -16,8 +16,34 @@ window.MB = window.MB || {};
   }
   MB.colorLerp = colorLerp;
 
+  // ---- 配色スキーム（色覚多様性対応: 既定は白×はちみつ） ----
+  MB.SCHEMES = {
+    honey: {
+      label: 'しろ × はちみつ（見やすい）',
+      fills: ['#fdf5ec', '#ffdf96'],
+      shades: ['#e3d2c2', '#e2ab55'],
+      sweepFills: ['#fffef8', '#fff3cf'],
+      sweepShades: ['#f5ecdf', '#f0d795'],
+      crumbs: ['#ffffff', '#ffe9b8'],
+      pop: ['#fff4e8', '#ffd870'],
+    },
+    pink: {
+      label: 'しろ × いちご',
+      fills: ['#fdf5ec', '#ffc9dc'],
+      shades: ['#e3d2c2', '#ea9dbd'],
+      sweepFills: ['#fffef8', '#ffe4ef'],
+      sweepShades: ['#f5ecdf', '#f8ccdd'],
+      crumbs: ['#ffffff', '#ffd4e2'],
+      pop: ['#fff4e8', '#ffc6da'],
+    },
+  };
+
   // ---- マシュマロ描画 ----
   MB.draw = {
+    scheme() {
+      const key = (MB.game && MB.game.data && MB.game.data.colors) || 'honey';
+      return MB.SCHEMES[key] || MB.SCHEMES.honey;
+    },
     // 着地・衝撃のぷにぷに変形量を計算
     squash(cell) {
       const now = performance.now();
@@ -54,14 +80,8 @@ window.MB = window.MB || {};
       ctx.scale(sx, sy);
       const h = bs / 2;
       const r = bs * (opts.round == null ? 0.44 : opts.round);
-      const white = color === C.WHITE;
-      let fill = white ? '#fdf5ec' : '#ffc9dc';
-      let shade = white ? '#e3d2c2' : '#ea9dbd';
-      if (opts.sweeping) {
-        // 回収中はキラッと明るく（透明にはしない）
-        fill = white ? '#fffef8' : '#ffe4ef';
-        shade = white ? '#f5ecdf' : '#f8ccdd';
-      }
+      const fc = this.fillFor(color, opts.sweeping);
+      const fill = fc.fill, shade = fc.shade;
 
       // ふんわり影（下）
       ctx.fillStyle = 'rgba(60,40,60,0.14)';
@@ -153,9 +173,8 @@ window.MB = window.MB || {};
       const cx = x + w / 2, cy = y + h / 2;
       const hw = w / 2, hh = h / 2;
       const r = Math.min(w, h) * (opts.round == null ? 0.34 : opts.round);
-      const white = color === C.WHITE;
-      const fill = white ? '#fdf5ec' : '#ffc9dc';
-      const shade = white ? '#e3d2c2' : '#ea9dbd';
+      const fc = this.fillFor(color, false);
+      const fill = fc.fill, shade = fc.shade;
       ctx.save();
       ctx.translate(cx, cy);
       // ふんわり影
@@ -187,13 +206,13 @@ window.MB = window.MB || {};
       ctx.restore();
     },
 
-    // 色と状態から塗り色を返す
+    // 色と状態から塗り色を返す（配色スキーム対応）
     fillFor(color, sweeping) {
-      const white = color === C.WHITE;
+      const sc = this.scheme();
       if (sweeping) {
-        return { fill: white ? '#fffef8' : '#ffe4ef', shade: white ? '#f5ecdf' : '#f8ccdd' };
+        return { fill: sc.sweepFills[color], shade: sc.sweepShades[color] };
       }
-      return { fill: white ? '#fdf5ec' : '#ffc9dc', shade: white ? '#e3d2c2' : '#ea9dbd' };
+      return { fill: sc.fills[color], shade: sc.shades[color] };
     },
 
     // となり同士のマシュマロを「もち」のようにつなぐ（中央がくびれた曲線）
@@ -308,7 +327,7 @@ window.MB = window.MB || {};
     reset() { this.parts = []; this.texts = []; this.shakeT = 0; this.flash = 0; },
 
     pop(x, y, color) {
-      const col = color === C.WHITE ? '#fff4e8' : '#ffc6da';
+      const col = MB.draw.scheme().pop[color] || '#fff4e8';
       for (let i = 0; i < 7; i++) {
         const a = U.rand(0, Math.PI * 2), sp = U.rand(40, 190);
         this.parts.push({
@@ -319,7 +338,7 @@ window.MB = window.MB || {};
     },
 
     crumbs(x, y, color) {
-      const col = color === C.WHITE ? '#fff' : '#ffd4e2';
+      const col = MB.draw.scheme().crumbs[color] || '#fff';
       for (let i = 0; i < 4; i++) {
         this.parts.push({
           x: x + U.rand(-6, 6), y: y + U.rand(-3, 3),

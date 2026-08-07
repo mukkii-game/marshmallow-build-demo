@@ -97,7 +97,7 @@ window.MB = window.MB || {};
 
       // ---- モニター（上部）: 回転ポリゴンマシュマロ ----
       const mw = Math.min(rect.w * 0.86, 270 * s * 1.2);
-      const mh = mw * 0.62;
+      const mh = mw * 0.55;
       const mx = cx - mw / 2;
       const my = rect.y + rect.h * 0.02;
       this.drawMonitor(ctx, mx, my, mw, mh, palette, opts);
@@ -105,7 +105,7 @@ window.MB = window.MB || {};
       // ---- デスク＋キャラクター（下部） ----
       const deskY = rect.y + rect.h * 0.88;
       const charCx = cx;
-      const charScale = s * (opts.mini ? 0.8 : 1);
+      const charScale = s * (opts.mini ? 0.72 : 0.95);
       this.drawProgrammer(ctx, charCx, deskY, charScale, palette, rect);
 
       // 飛行中マシュマロ
@@ -211,8 +211,8 @@ window.MB = window.MB || {};
       const beach = !!(opts2 && opts2.beach);
       const mood = this.mood;
       const bobY = Math.sin(this.bob) * 3 * s;
-      const bodyW = 150 * s, bodyH = 120 * s;
-      const bodyY = deskY - bodyH * 0.55 + bobY;
+      const bodyW = 225 * s, bodyH = 170 * s; // 1.5倍のふくよかボディ
+      const bodyY = deskY - bodyH * 0.48 + bobY;
 
       ctx.save();
 
@@ -230,7 +230,7 @@ window.MB = window.MB || {};
         }
       }
 
-      // ---- 体（まるっと） ----
+      // ---- 体（アンコ型・どっしりまんまる） ----
       const shirt = mood === 'mach' ? '#ffe9b8' : '#cfe6d8';
       ctx.fillStyle = shirt;
       ctx.beginPath();
@@ -239,10 +239,15 @@ window.MB = window.MB || {};
       ctx.strokeStyle = 'rgba(40,40,60,0.25)';
       ctx.lineWidth = 2 * s;
       ctx.stroke();
+      // おなかの丸みハイライト
+      ctx.fillStyle = 'rgba(255,255,255,0.28)';
+      ctx.beginPath();
+      ctx.ellipse(cx, bodyY + bodyH * 0.16, bodyW * 0.34, bodyH * 0.3, 0, 0, Math.PI * 2);
+      ctx.fill();
 
-      // ---- 頭 ----
-      const headR = 52 * s;
-      const headY = bodyY - bodyH / 2 - headR * 0.55;
+      // ---- 頭（首なしで体にめり込む） ----
+      const headR = 50 * s;
+      const headY = bodyY - bodyH / 2 - headR * 0.3;
       const skin = '#ffe0c2';
       ctx.fillStyle = skin;
       ctx.beginPath();
@@ -373,7 +378,7 @@ window.MB = window.MB || {};
 
       // ---- デスク ----
       ctx.fillStyle = '#6b4f3a';
-      U.rr(ctx, cx - 160 * s, deskY - 8 * s, 320 * s, 16 * s, 6 * s);
+      U.rr(ctx, cx - 175 * s, deskY - 8 * s, 350 * s, 16 * s, 6 * s);
       ctx.fill();
 
       // ノートPC
@@ -388,9 +393,9 @@ window.MB = window.MB || {};
       U.rr(ctx, cx - lapW / 2 - 6 * s, deskY - 10 * s, lapW + 12 * s, 8 * s, 3 * s); // キーボード
       ctx.fill();
 
-      // ---- 腕（タイピング） ----
+      // ---- 腕（タイピング・むちむち） ----
       ctx.strokeStyle = shirt;
-      ctx.lineWidth = 16 * s;
+      ctx.lineWidth = 21 * s;
       ctx.lineCap = 'round';
       const typeL = Math.sin(this.typePhase * 2) * 5 * s;
       const typeR = Math.sin(this.typePhase * 2 + Math.PI) * 5 * s;
@@ -408,7 +413,7 @@ window.MB = window.MB || {};
       ctx.fill();
 
       // ---- マシュマロ袋（Sマーク） ----
-      const bagX = cx + 118 * s, bagY = deskY - 30 * s;
+      const bagX = cx + 152 * s, bagY = deskY - 30 * s;
       ctx.fillStyle = '#fff';
       U.rr(ctx, bagX - 22 * s, bagY - 4 * s, 44 * s, 34 * s, 8 * s);
       ctx.fill();

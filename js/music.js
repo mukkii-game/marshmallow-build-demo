@@ -22,6 +22,13 @@ window.MB = window.MB || {};
     themeReady: false,
     started: false,
 
+    themeBase: 0.8,
+
+    // マスター音量変更をテーマ曲にも反映
+    applyVolume() {
+      if (this.themeAudio) this.themeAudio.volume = this.themeBase * MB.audio.volume;
+    },
+
     initTheme(audioEl) {
       this.themeAudio = audioEl;
       if (!audioEl) return;
@@ -46,7 +53,8 @@ window.MB = window.MB || {};
         this.bpm = MB.THEME_SYNC.bpm;
         const a = this.themeAudio;
         a.loop = true;
-        a.volume = MB.audio.muted ? 0 : 0.8;
+        this.themeBase = 0.8;
+        a.volume = this.themeBase * MB.audio.volume;
         a.currentTime = 0;
         a.play().catch(() => { this.startGenerative(c); });
       } else {
@@ -91,7 +99,8 @@ window.MB = window.MB || {};
       this.sweepMeasures = 2;
       const a = this.themeAudio;
       a.loop = true;
-      a.volume = MB.audio.muted ? 0 : (volume == null ? 0.7 : volume);
+      this.themeBase = volume == null ? 0.7 : volume;
+      a.volume = this.themeBase * MB.audio.volume;
       if (a.paused) { a.currentTime = 0; a.play().catch(() => {}); }
       this.started = true;
       return true;

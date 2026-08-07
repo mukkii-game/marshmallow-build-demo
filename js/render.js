@@ -18,71 +18,133 @@ window.MB = window.MB || {};
 
   // ---- マシュマロ描画 ----
   MB.draw = {
-    // x,y,size: 左上とセルサイズ
+    // 着地・衝撃のぷにぷに変形量を計算
+    squash(cell) {
+      const now = performance.now();
+      let sx = 1, sy = 1;
+      if (cell.born) {
+        const t = (now - cell.born) / 300;
+        if (t < 1) {
+          const k = Math.sin(Math.PI * Math.min(t * 1.6, 1)) * (1 - t);
+          sy = 1 - 0.34 * k;
+          sx = 1 + 0.30 * k;
+        } else cell.born = 0;
+      }
+      if (cell.jig) {
+        const t = (now - cell.jig) / 260;
+        if (t < 1) {
+          const k = Math.sin(Math.PI * t) * (1 - t);
+          sy *= 1 - 0.15 * k;
+          sx *= 1 + 0.12 * k;
+        } else cell.jig = 0;
+      }
+      return { sx, sy };
+    },
+
+    // x,y,size: 左上とセルサイズ。opts: {s, marked, sweeping, round, sx, sy, rot}
     marshmallow(ctx, x, y, size, color, opts) {
       opts = opts || {};
-      const pad = size * 0.05;
-      const bx = x + pad, by = y + pad, bs = size - pad * 2;
-      const r = bs * (opts.round == null ? 0.34 : opts.round);
+      const bs = size * 1.06; // セルよりちょい大きく描いてむぎゅっと密着
+      const cx = x + size / 2, cy = y + size / 2;
+      const sx = opts.sx == null ? 1 : opts.sx;
+      const sy = opts.sy == null ? 1 : opts.sy;
+      ctx.save();
+      ctx.translate(cx, cy + (1 - sy) * size * 0.5); // つぶれた分は下に沈む
+      if (opts.rot) ctx.rotate(opts.rot);
+      ctx.scale(sx, sy);
+      const h = bs / 2;
+      const r = bs * (opts.round == null ? 0.44 : opts.round);
       const white = color === C.WHITE;
-      let fill = white ? '#fdf6ee' : '#ffc6da';
-      let shade = white ? '#e6d6c6' : '#eb9dbc';
+      let fill = white ? '#fdf5ec' : '#ffc9dc';
+      let shade = white ? '#e3d2c2' : '#ea9dbd';
       if (opts.sweeping) {
-        fill = white ? '#efe9e4' : '#e8c3d1';
+        // 回収中はキラッと明るく（透明にはしない）
+        fill = white ? '#fffef8' : '#ffe4ef';
+        shade = white ? '#f5ecdf' : '#f8ccdd';
       }
+
+      // ふんわり影（下）
+      ctx.fillStyle = 'rgba(60,40,60,0.14)';
+      ctx.beginPath();
+      ctx.ellipse(0, h * 0.92, h * 0.85, h * 0.22, 0, 0, Math.PI * 2);
+      ctx.fill();
+
       // 本体
-      U.rr(ctx, bx, by, bs, bs, r);
+      U.rr(ctx, -h, -h, bs, bs, r);
       ctx.fillStyle = fill;
       ctx.fill();
-      // 下側の焼き色シェード
       ctx.save();
-      U.rr(ctx, bx, by, bs, bs, r);
+      U.rr(ctx, -h, -h, bs, bs, r);
       ctx.clip();
+      // 下側のやわらか陰影
       ctx.fillStyle = shade;
-      ctx.globalAlpha = 0.55;
+      ctx.globalAlpha = 0.5;
       ctx.beginPath();
-      ctx.ellipse(bx + bs / 2, by + bs * 1.12, bs * 0.62, bs * 0.42, 0, 0, Math.PI * 2);
+      ctx.ellipse(0, h * 1.15, h * 1.25, h * 0.85, 0, 0, Math.PI * 2);
       ctx.fill();
-      // ハイライト
-      ctx.globalAlpha = 0.7;
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.ellipse(bx + bs * 0.32, by + bs * 0.26, bs * 0.2, bs * 0.13, -0.5, 0, Math.PI * 2);
+      // 中心のふわっと感（radial）
+      const g = ctx.createRadialGradient(-h * 0.35, -h * 0.4, bs * 0.05, 0, 0, bs * 0.85);
+      g.addColorStop(0, 'rgba(255,255,255,0.95)');
+      g.addColorStop(0.45, 'rgba(255,255,255,0.25)');
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = g;
+      U.rr(ctx, -h, -h, bs, bs, r);
       ctx.fill();
       ctx.restore();
-      ctx.globalAlpha = 1;
+
+      // 回収中のキラキラ
+      if (opts.sweeping) {
+        const tw = performance.now() / 130;
+        ctx.strokeStyle = `rgba(255,230,150,${0.5 + 0.4 * Math.sin(tw)})`;
+        ctx.lineWidth = Math.max(2, bs * 0.05);
+        U.rr(ctx, -h + 1, -h + 1, bs - 2, bs - 2, r);
+        ctx.stroke();
+        ctx.fillStyle = `rgba(255,255,255,${0.25 + 0.2 * Math.sin(tw * 1.7)})`;
+        ctx.beginPath();
+        ctx.arc(bs * 0.18, -bs * 0.18, bs * 0.1, 0, Math.PI * 2);
+        ctx.arc(-bs * 0.2, bs * 0.1, bs * 0.06, 0, Math.PI * 2);
+        ctx.fill();
+      }
 
       // 予約マーク: ぷるぷる顔
       if (opts.marked && !opts.sweeping) {
-        const ex = bx + bs / 2, ey = by + bs * 0.48;
+        const ey = bs * -0.02;
         ctx.fillStyle = 'rgba(70,50,60,0.75)';
         ctx.beginPath();
-        ctx.ellipse(ex - bs * 0.16, ey, bs * 0.05, bs * 0.07, 0, 0, Math.PI * 2);
-        ctx.ellipse(ex + bs * 0.16, ey, bs * 0.05, bs * 0.07, 0, 0, Math.PI * 2);
+        ctx.ellipse(-bs * 0.16, ey, bs * 0.05, bs * 0.07, 0, 0, Math.PI * 2);
+        ctx.ellipse(bs * 0.16, ey, bs * 0.05, bs * 0.07, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.strokeStyle = 'rgba(70,50,60,0.7)';
         ctx.lineWidth = Math.max(1, bs * 0.04);
         ctx.beginPath();
-        ctx.arc(ex, ey + bs * 0.1, bs * 0.1, 0.15 * Math.PI, 0.85 * Math.PI);
+        ctx.arc(0, ey + bs * 0.1, bs * 0.1, 0.15 * Math.PI, 0.85 * Math.PI);
         ctx.stroke();
+        // ほっぺ
+        ctx.fillStyle = 'rgba(255,140,160,0.35)';
+        ctx.beginPath();
+        ctx.ellipse(-bs * 0.28, ey + bs * 0.12, bs * 0.08, bs * 0.05, 0, 0, Math.PI * 2);
+        ctx.ellipse(bs * 0.28, ey + bs * 0.12, bs * 0.08, bs * 0.05, 0, 0, Math.PI * 2);
+        ctx.fill();
       }
 
       // Sマーク
       if (opts.s) {
         ctx.fillStyle = '#ff5c96';
         ctx.beginPath();
-        ctx.arc(bx + bs * 0.5, by + bs * 0.5, bs * 0.26, 0, Math.PI * 2);
+        ctx.arc(0, 0, bs * 0.24, 0, Math.PI * 2);
         ctx.globalAlpha = 0.92;
         ctx.fill();
         ctx.globalAlpha = 1;
         ctx.fillStyle = '#fff';
-        ctx.font = `bold ${Math.round(bs * 0.38)}px sans-serif`;
+        ctx.font = `bold ${Math.round(bs * 0.34)}px sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('S', bx + bs * 0.5, by + bs * 0.54);
+        ctx.fillText('S', 0, bs * 0.03);
         ctx.textAlign = 'left';
         ctx.textBaseline = 'alphabetic';
       }
+      ctx.restore();
     },
   };
 
@@ -240,36 +302,45 @@ window.MB = window.MB || {};
       this.portrait = h > w * 1.05;
       const R = {};
       if (!this.portrait) {
-        // 横画面: 左パネル + 中央フィールド + 右ネクスト
-        const cell = Math.min((h * 0.585) / C.ROWS, (w * 0.54) / C.COLS);
+        // 横画面: 左パネル + 中央フィールド + 右ネクスト/ボタン
+        const cell = Math.min((h * 0.60) / C.ROWS, (w * 0.55) / C.COLS);
         const fw = cell * C.COLS, fh = cell * C.ROWS;
-        const topPad = cell * 2.2;               // スポーン領域（ウィンドウ内）
-        const winBarH = Math.max(20, cell * 0.55); // ウィンドウタイトルバー
-        const barsH = cell * 0.82;
+        const topPad = cell * 2.15;              // スポーン領域（ウィンドウ内）
+        const winBarH = Math.max(20, cell * 0.5); // ウィンドウタイトルバー
+        const barsH = cell * 0.68;
         let fx = w * 0.60 - fw / 2;
         fx = Math.min(fx, w - fw - cell * 2.7);  // 右のネクストが収まるように
-        const fy = h * 0.97 - fh;
+        const fy = h * 0.965 - fh;
         R.cell = cell;
         R.topPad = topPad;
         R.winBarH = winBarH;
         R.field = { x: fx, y: fy, w: fw, h: fh };
-        R.bars = { x: fx, y: fy - topPad - winBarH - barsH - 14, w: fw, h: barsH };
-        R.hud = { x: fx, y: R.bars.y - h * 0.055, w: fw, h: h * 0.05 };
+        R.bars = { x: fx, y: fy - topPad - winBarH - barsH - 12, w: fw, h: barsH };
+        R.hud = { x: fx, y: Math.max(4, R.bars.y - h * 0.052), w: fw, h: h * 0.045 };
         R.panel = { x: w * 0.015, y: h * 0.09, w: fx - w * 0.05, h: h * 0.88 };
-        R.next = { x: fx + fw + cell * 0.45, y: fy - topPad, w: cell * 1.7, h: cell * 6 };
-        const bw = Math.min(74, h * 0.12);
+        R.next = { x: fx + fw + cell * 0.4, y: fy - topPad, w: cell * 1.7, h: cell * 6 };
+        // 操作ボタン: フィールド右下の2列グリッド
+        const margin = w - (fx + fw);
+        const bs = Math.min(60, h * 0.09, (margin - 16) / 2.3);
+        const bx = fx + fw + (margin - bs * 2.2) / 2;
+        const by = h - bs * 3.75;
         R.buttons = {
-          size: bw,
-          left: { x: w * 0.01 + bw * 0.1, y: h - bw * 1.25 },
-          right: { x: w - bw * 2.4, y: h - bw * 1.25 },
+          size: bs,
+          pos: {
+            left: { x: bx, y: by },
+            right: { x: bx + bs * 1.2, y: by },
+            soft: { x: bx, y: by + bs * 1.2 },
+            rotate: { x: bx + bs * 1.2, y: by + bs * 1.2 },
+            hard: { x: bx + bs * 0.6, y: by + bs * 2.4 },
+          },
         };
       } else {
         // 縦画面: 上フィールド + 下キャラ + ボタン
-        const cell = Math.min((w * 0.96) / C.COLS, (h * 0.35) / C.ROWS);
+        const cell = Math.min((w * 0.96) / C.COLS, (h * 0.37) / C.ROWS);
         const fw = cell * C.COLS, fh = cell * C.ROWS;
-        const topPad = cell * 2.2;
-        const winBarH = Math.max(16, cell * 0.55);
-        const barsH = cell * 0.9;
+        const topPad = cell * 2.15;
+        const winBarH = Math.max(16, cell * 0.5);
+        const barsH = cell * 0.8;
         const fx = (w - fw) / 2;
         R.cell = cell;
         R.topPad = topPad;
@@ -281,11 +352,18 @@ window.MB = window.MB || {};
         R.field = { x: fx, y: fy, w: fw, h: fh };
         const btnH = Math.min(h * 0.14, 110);
         R.panel = { x: w * 0.26, y: fy + fh + h * 0.005, w: w * 0.48, h: Math.max(120, h - (fy + fh) - btnH - h * 0.02) };
-        const bw = Math.min(86, w * 0.16);
+        const bs = Math.min(86, w * 0.16);
+        const ly = h - bs * 1.3, lx = w * 0.02;
+        const rx = w - w * 0.02 - bs * 2.2;
         R.buttons = {
-          size: bw,
-          left: { x: w * 0.02, y: h - bw * 1.3 },
-          right: { x: w - w * 0.02 - bw * 2.2, y: h - bw * 1.3 },
+          size: bs,
+          pos: {
+            left: { x: lx, y: ly },
+            right: { x: lx + bs * 1.15, y: ly },
+            soft: { x: lx + bs * 2.3, y: ly },
+            rotate: { x: rx, y: ly - bs * 0.55 },
+            hard: { x: rx + bs * 1.15, y: ly },
+          },
         };
       }
       this.rects = R;
@@ -386,7 +464,7 @@ window.MB = window.MB || {};
       ctx.fillStyle = 'rgba(255,255,255,0.55)';
       ctx.font = `${Math.round(barH * 0.5)}px ${this.FONT}`;
       ctx.textAlign = 'center';
-      const title = game.mach ? 'build.mash — マッハビルド中!!' : 'build.mash — コンパイル中…';
+      const title = game.mach ? '🔥 マッハタイム!! 🔥' : 'マロくん おしごとちゅう…';
       ctx.fillText(title, f.x + f.w / 2, wy - barH / 2 - 1);
       ctx.textAlign = 'left';
 
@@ -443,21 +521,27 @@ window.MB = window.MB || {};
             const d = cell * (pulse - 1) / 2;
             px -= d; py -= d; size = cell * pulse;
           }
+          const sq = MB.draw.squash(cellData);
+          const rot = (((x * 13 + y * 7) % 9) - 4) * 0.014; // 手置きっぽい微妙な傾き
           MB.draw.marshmallow(ctx, px, py, size, cellData.color, {
             s: cellData.s, marked: cellData.marked, sweeping: cellData.sweeping,
+            sx: sq.sx, sy: sq.sy, rot,
           });
           if (cellData.marked && !cellData.sweeping) {
-            ctx.strokeStyle = `rgba(255,235,150,${0.35 + 0.35 * beat})`;
-            ctx.lineWidth = 2;
-            U.rr(ctx, px + 1, py + 1, size - 2, size - 2, size * 0.3);
+            ctx.strokeStyle = `rgba(255,235,150,${0.3 + 0.32 * beat})`;
+            ctx.lineWidth = 2.5;
+            U.rr(ctx, px + 1, py + 1, size - 2, size - 2, size * 0.4);
             ctx.stroke();
           }
         }
       }
 
-      // 分離落下中
+      // 分離落下中（落下スピードでびよーんと伸びる）
       for (const fal of field.fallers) {
-        MB.draw.marshmallow(ctx, f.x + fal.x * cell, f.y + fal.y * cell, cell, fal.color, { s: fal.s });
+        const stretch = U.clamp(1 + (fal.vy || 0) * 0.012, 1, 1.18);
+        MB.draw.marshmallow(ctx, f.x + fal.x * cell, f.y + fal.y * cell, cell, fal.color, {
+          s: fal.s, sy: stretch, sx: 2 - stretch,
+        });
       }
 
       // 操作ピース＋ゴースト
@@ -471,9 +555,10 @@ window.MB = window.MB || {};
           }
           ctx.globalAlpha = 1;
         }
-        const yOff = game.softDropping ? 0 : (1 - game.gravityT()) * 0; // グリッドスナップ
         for (const [i, dx, dy] of [[0, 0, 0], [1, 1, 0], [2, 0, 1], [3, 1, 1]]) {
-          MB.draw.marshmallow(ctx, f.x + (p.x + dx) * cell, f.y + (p.y + dy + yOff) * cell, cell, p.cells[i].color, { s: p.cells[i].s });
+          MB.draw.marshmallow(ctx, f.x + (p.x + dx) * cell, f.y + (p.y + dy) * cell, cell, p.cells[i].color, {
+            s: p.cells[i].s, rot: (i - 1.5) * 0.02,
+          });
         }
       }
 
@@ -566,9 +651,9 @@ window.MB = window.MB || {};
         label = `エンドレス  Lv.${game.endlessLoop + 1}`;
       }
       ctx.fillText(label, hud.x, hud.y + fsize);
-      // 右: スコア
+      // 右: スコア（右上の音量ボタンを避ける）
       ctx.textAlign = 'right';
-      ctx.fillText(`SCORE ${U.fmtScore(game.score)}`, hud.x + hud.w, hud.y + fsize);
+      ctx.fillText(`スコア ${U.fmtScore(game.score)}`, Math.min(hud.x + hud.w, this.w - 100), hud.y + fsize);
       ctx.textAlign = 'left';
 
       // バー（進捗＋ノリ）
@@ -590,7 +675,7 @@ window.MB = window.MB || {};
         }
         ctx.font = `bold ${Math.round(halfH * 0.78)}px ${this.FONT}`;
         ctx.fillStyle = '#fff';
-        ctx.fillText(`進捗 ${Math.floor(prog * 100)}%`, b.x + 8, b.y + halfH * 0.8);
+        ctx.fillText(`おしごと ${Math.floor(prog * 100)}%`, b.x + 8, b.y + halfH * 0.8);
       } else {
         // エンドレス: 次スキンまで
         const t = game.skinProgress();
@@ -601,7 +686,7 @@ window.MB = window.MB || {};
         }
         ctx.font = `bold ${Math.round(halfH * 0.78)}px ${this.FONT}`;
         ctx.fillStyle = '#fff';
-        ctx.fillText(`つぎの時間帯まで`, b.x + 8, b.y + halfH * 0.8);
+        ctx.fillText(`つぎの じかんまで`, b.x + 8, b.y + halfH * 0.8);
       }
 
       // ノリゲージ / マッハタイム残り
@@ -636,9 +721,8 @@ window.MB = window.MB || {};
       }
     },
 
-    // ---- タッチボタン ----
+    // ---- 操作ボタン（マウス/タッチ共用・常時表示） ----
     drawTouchButtons(game) {
-      if (!game.touchMode) return;
       const ctx = this.ctx;
       const B = this.rects.buttons;
       const s = B.size;

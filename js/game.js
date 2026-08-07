@@ -49,8 +49,9 @@ window.MB = window.MB || {};
       this.input = input;
       this.field = new MB.Field();
       this.gen = new MB.PieceGen();
-      this.data = MB.util.load() || { bestStory: 0, bestEndless: 0, clearedStages: 0, muted: false };
-      MB.audio.muted = this.data.muted;
+      this.data = MB.util.load() || { bestStory: 0, bestEndless: 0, clearedStages: 0, volume: 0.5 };
+      if (this.data.volume == null) this.data.volume = this.data.muted ? 0 : 0.5; // 旧データ移行
+      MB.audio.setVolume(this.data.volume);
       this.field.onClear = (r) => this.handleClear(r);
       this.field.onSweepMiss = () => this.handleSweepMiss();
       this.field.onWrap = () => { this.passSquares = 0; };
@@ -81,6 +82,21 @@ window.MB = window.MB || {};
       return this.workPoints / this.stage.quota;
     },
     machRemain01() { return this.machDur > 0 ? U.clamp(this.machT / this.machDur, 0, 1) : 0; },
+
+    setVolume(v) {
+      this.data.volume = v;
+      MB.audio.setVolume(v);
+      U.save(this.data);
+    },
+
+    // 100 → 50 → 25 → 0 → 100 …
+    cycleVolume() {
+      const order = [1, 0.5, 0.25, 0];
+      let idx = order.findIndex((v) => Math.abs(v - this.data.volume) < 0.01);
+      if (idx < 0) idx = 1;
+      this.setVolume(order[(idx + 1) % order.length]);
+      if (MB.audio.ctx) MB.sfx.uiMove();
+    },
     skinProgress() { return U.clamp(this.squaresThisSkin / MB.ENDLESS.squaresPerSkin, 0, 1); },
     gravityT() { return 0; },
 
@@ -281,10 +297,7 @@ window.MB = window.MB || {};
     action(name, arg) {
       const st = this.state;
       if (name === 'mute') {
-        this.data.muted = !this.data.muted;
-        MB.audio.setMuted(this.data.muted);
-        if (MB.music.themeAudio) MB.music.themeAudio.volume = this.data.muted ? 0 : 0.8;
-        U.save(this.data);
+        this.setVolume(this.data.volume > 0 ? 0 : (MB.audio.lastVol || 0.5));
         return;
       }
       if (st === S.PLAY) {
@@ -350,7 +363,8 @@ window.MB = window.MB || {};
         case 'pause_resume': this.resumePlay(); break;
         case 'pause_retry': this.retry(); break;
         case 'pause_title': MB.music.stop(); this.backToTitle(); break;
-        case 'pause_mute': this.action('mute'); break;
+        case 'pause_mute': this.cycleVolume(); break;
+        case 'vol_cycle': this.cycleVolume(); break;
         case 'over_retry': this.retry(); break;
         case 'over_title': this.backToTitle(); break;
         case 'title_start': this.toMenu(); break;
@@ -489,7 +503,31 @@ window.MB = window.MB || {};
         else if (st === S.STAGE_CLEAR) this.drawStageClear(ctx, r);
         else if (st === S.GAME_OVER) this.drawGameOver(ctx, r);
       }
+      this.drawVolumeButton(ctx, r);
       ctx.restore();
+    },
+
+    // 画面右上の音量ボタン（常時表示・クリックで 100→50→25→0 切替）
+    drawVolumeButton(ctx, r) {
+      const v = this.data.volume;
+      const icon = v === 0 ? '🔇' : v <= 0.25 ? '🔈' : v <= 0.5 ? '🔉' : '🔊';
+      const bw = 78, bh = 32;
+      const x = r.w - bw - 10, y = 8;
+      ctx.fillStyle = 'rgba(20,16,40,0.55)';
+      U.rr(ctx, x, y, bw, bh, bh / 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+      ctx.lineWidth = 1.5;
+      U.rr(ctx, x, y, bw, bh, bh / 2);
+      ctx.stroke();
+      ctx.fillStyle = '#fff';
+      ctx.font = `bold 15px ${r.FONT}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`${icon} ${Math.round(v * 100)}%`, x + bw / 2, y + bh / 2 + 1);
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
+      this.uiButtons.push({ id: 'vol_cycle', x, y, w: bw, h: bh });
     },
 
     overlayBg(ctx, r, alpha) {
@@ -555,42 +593,117 @@ window.MB = window.MB || {};
       }
 
       const isMenu = this.state === S.MENU;
-      const cy = r.h * (isMenu ? 0.2 : 0.34);
+      const cy = r.h * (isMenu ? 0.2 : 0.17);
       // ロゴ
-      const logoSize = Math.min(r.w * 0.085, 64);
-      this.bigText(ctx, r, 'マシュマロビルド', cy, logoSize, '#fff0f6');
-      ctx.font = `${Math.round(logoSize * 0.36)}px ${r.FONT}`;
+      const logoSize = Math.min(r.w * 0.1, 76);
+      this.bigText(ctx, r, 'マシュとマロ', cy, logoSize, '#fff0f6');
+      ctx.font = `${Math.round(logoSize * 0.34)}px ${r.FONT}`;
       ctx.textAlign = 'center';
       ctx.fillStyle = '#ffd0e0';
-      ctx.fillText('〜 夜明けまでに α を 〜', r.w / 2, cy + logoSize * 0.8);
+      ctx.fillText('まよなかの おしごとパズル', r.w / 2, cy + logoSize * 0.75);
       ctx.textAlign = 'left';
 
       if (!isMenu) {
+        this.drawRulesPanel(ctx, r, r.h * 0.31);
         if (Math.sin(tNow * 3.5) > -0.4) {
-          this.bigText(ctx, r, 'タップ / Enter でスタート', r.h * 0.62, Math.min(r.w * 0.032, 24), '#fff');
+          this.bigText(ctx, r, 'タップ / Enter で スタート', r.h * 0.79, Math.min(r.w * 0.032, 24), '#fff');
         }
         ctx.font = `${Math.min(r.w * 0.022, 15)}px ${r.FONT}`;
         ctx.textAlign = 'center';
         ctx.fillStyle = 'rgba(255,255,255,0.55)';
-        ctx.fillText('← → 移動 / ↑ Z X 回転 / ↓ ソフト / Space ハードドロップ', r.w / 2, r.h * 0.7);
-        ctx.fillText('プロトタイプ α — 音が出ます 🔊', r.w / 2, r.h * 0.745);
+        ctx.fillText('← → いどう ／ ↑ Z X まわす ／ ↓ ゆっくり ／ Space ストン！ （マウスだけでもOK）', r.w / 2, r.h * 0.86);
+        ctx.fillText('ためしばん — おとが でます 🔊（みぎうえで おんりょう）', r.w / 2, r.h * 0.9);
         ctx.textAlign = 'left';
       } else {
         // モード選択
         const bw = Math.min(r.w * 0.6, 420);
         const bh = Math.min(r.h * 0.12, 74);
-        this.uiButton(ctx, r, 'menu_story', 'ストーリー「ナイトシフト」', r.w / 2, r.h * 0.42, bw, bh, this.menuIndex === 0);
-        this.uiButton(ctx, r, 'menu_endless', 'エンドレス（スコアアタック）', r.w / 2, r.h * 0.42 + bh * 1.35, bw, bh, this.menuIndex === 1);
+        this.uiButton(ctx, r, 'menu_story', 'ものがたり（よるの おしごと）', r.w / 2, r.h * 0.42, bw, bh, this.menuIndex === 0);
+        this.uiButton(ctx, r, 'menu_endless', 'エンドレス（とことん）', r.w / 2, r.h * 0.42 + bh * 1.35, bw, bh, this.menuIndex === 1);
         ctx.font = `${Math.min(r.w * 0.024, 16)}px ${r.FONT}`;
         ctx.textAlign = 'center';
         ctx.fillStyle = 'rgba(255,255,255,0.7)';
         const cleared = this.data.clearedStages;
-        ctx.fillText(cleared >= MB.STAGES.length ? '★ αビルド完成ずみ！' : `ステージ進行: ${cleared} / ${MB.STAGES.length}`,
+        ctx.fillText(cleared >= MB.STAGES.length ? '★ ものがたり クリアずみ！' : `おはなしの すすみ: ${cleared} / ${MB.STAGES.length}`,
                      r.w / 2, r.h * 0.42 + bh * 2.35);
-        ctx.fillText(`ベスト: ストーリー ${U.fmtScore(this.data.bestStory)} / エンドレス ${U.fmtScore(this.data.bestEndless)}`,
+        ctx.fillText(`ベスト: ものがたり ${U.fmtScore(this.data.bestStory)} ／ エンドレス ${U.fmtScore(this.data.bestEndless)}`,
                      r.w / 2, r.h * 0.42 + bh * 2.35 + 24);
         ctx.textAlign = 'left';
       }
+    },
+
+    // タイトルのルールせつめい
+    drawRulesPanel(ctx, r, y0) {
+      const pw = Math.min(r.w * 0.78, 640);
+      const ph = r.h * 0.44;
+      const px = (r.w - pw) / 2;
+      ctx.fillStyle = 'rgba(20,14,40,0.55)';
+      U.rr(ctx, px, y0, pw, ph, 18);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+      ctx.lineWidth = 1.5;
+      U.rr(ctx, px, y0, pw, ph, 18);
+      ctx.stroke();
+
+      const rowH = ph / 4;
+      const fs = Math.min(rowH * 0.34, pw * 0.034);
+      const icoX = px + pw * 0.1;
+      const txtX = px + pw * 0.2;
+      ctx.font = `bold ${fs}px ${r.FONT}`;
+      ctx.textBaseline = 'middle';
+
+      const rows = [
+        () => { // 2x2でそろえる
+          const m = rowH * 0.3;
+          const cy = y0 + rowH * 0.5;
+          for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+            MB.draw.marshmallow(ctx, icoX - m + dx * m, cy - m + dy * m, m, MB.C.PINK, {});
+          }
+          return 'おなじ いろを ましかく（2×2）に そろえよう';
+        },
+        () => { // ラインが回収
+          const cy = y0 + rowH * 1.5;
+          ctx.strokeStyle = 'rgba(150,220,255,0.9)';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(icoX, cy - rowH * 0.3);
+          ctx.lineTo(icoX, cy + rowH * 0.3);
+          ctx.stroke();
+          ctx.fillStyle = 'rgba(150,220,255,1)';
+          ctx.beginPath();
+          ctx.moveTo(icoX - 7, cy - rowH * 0.34);
+          ctx.lineTo(icoX + 7, cy - rowH * 0.34);
+          ctx.lineTo(icoX, cy - rowH * 0.2);
+          ctx.closePath();
+          ctx.fill();
+          return 'ひかりの ラインが とおると、マロくんが ぱくっ！';
+        },
+        () => { // ノリゲージ→マッハ
+          const cy = y0 + rowH * 2.5;
+          ctx.fillStyle = 'rgba(15,14,30,0.7)';
+          U.rr(ctx, icoX - rowH * 0.35, cy - rowH * 0.12, rowH * 0.7, rowH * 0.24, rowH * 0.12);
+          ctx.fill();
+          const grad = ctx.createLinearGradient(icoX - rowH * 0.35, 0, icoX + rowH * 0.35, 0);
+          grad.addColorStop(0, '#ff9ec6');
+          grad.addColorStop(1, '#ffd0a0');
+          ctx.fillStyle = grad;
+          U.rr(ctx, icoX - rowH * 0.33, cy - rowH * 0.1, rowH * 0.55, rowH * 0.2, rowH * 0.1);
+          ctx.fill();
+          return 'いっぱい たべさせると ノリノリ → マッハタイム で 2ばい！';
+        },
+        () => { // Sマーク
+          const m = rowH * 0.55;
+          MB.draw.marshmallow(ctx, icoX - m / 2, y0 + rowH * 3.5 - m / 2, m, MB.C.WHITE, { s: true });
+          return 'Sマークは おなじ いろを まるごと おそうじ！';
+        },
+      ];
+      rows.forEach((draw, i) => {
+        const label = draw();
+        ctx.fillStyle = 'rgba(255,255,255,0.92)';
+        ctx.font = `bold ${fs}px ${r.FONT}`;
+        ctx.fillText(label, txtX, y0 + rowH * (i + 0.5));
+      });
+      ctx.textBaseline = 'alphabetic';
     },
 
     drawStageIntro(ctx, r) {
@@ -602,7 +715,7 @@ window.MB = window.MB || {};
       this.bigText(ctx, r, st.time, r.h * 0.38, Math.min(r.w * 0.09, 70), '#ffd9a0');
       this.bigText(ctx, r, st.name, r.h * 0.5, Math.min(r.w * 0.055, 42), '#fff');
       if (this.mode === 'story') {
-        this.bigText(ctx, r, `ノルマ: 進捗 ${st.quota} pt`, r.h * 0.6, Math.min(r.w * 0.03, 22), '#c8f5e6');
+        this.bigText(ctx, r, 'めざせ おしごと 100%！', r.h * 0.6, Math.min(r.w * 0.03, 22), '#c8f5e6');
       }
       if (t > 1.4) {
         this.bigText(ctx, r, 'READY…', r.h * 0.72, Math.min(r.w * 0.04, 30), '#ff9ec6');
@@ -618,7 +731,7 @@ window.MB = window.MB || {};
       this.uiButton(ctx, r, 'pause_resume', 'さいかい', r.w / 2, r.h * 0.45, bw, bh, true);
       this.uiButton(ctx, r, 'pause_retry', 'やりなおす', r.w / 2, r.h * 0.45 + bh * 1.3, bw, bh);
       this.uiButton(ctx, r, 'pause_title', 'タイトルへ', r.w / 2, r.h * 0.45 + bh * 2.6, bw, bh);
-      this.uiButton(ctx, r, 'pause_mute', this.data.muted ? '🔇 ミュート中' : '🔊 サウンドON', r.w / 2, r.h * 0.45 + bh * 3.9, bw, bh);
+      this.uiButton(ctx, r, 'pause_mute', `おんりょう ${Math.round(this.data.volume * 100)}%`, r.w / 2, r.h * 0.45 + bh * 3.9, bw, bh);
     },
 
     drawStageClear(ctx, r) {
@@ -629,7 +742,7 @@ window.MB = window.MB || {};
       ctx.translate(r.w / 2, r.h * 0.35);
       ctx.scale(pop, pop);
       ctx.translate(-r.w / 2, -r.h * 0.35);
-      this.bigText(ctx, r, '✓ BUILD PASSED', r.h * 0.32, Math.min(r.w * 0.06, 48), '#8df0a8');
+      this.bigText(ctx, r, '✓ おしごと かんりょう！', r.h * 0.32, Math.min(r.w * 0.06, 48), '#8df0a8');
       this.bigText(ctx, r, `${this.stage.time} ${this.stage.name} クリア！`, r.h * 0.42, Math.min(r.w * 0.035, 26));
       ctx.restore();
       if (t > 0.6) {
@@ -642,7 +755,7 @@ window.MB = window.MB || {};
         ctx.textAlign = 'left';
       }
       if (t > 1.2 && Math.sin(t * 4) > -0.3) {
-        const next = this.stageIndex >= MB.STAGES.length - 1 ? 'エンディングへ' : 'つぎの時間帯へ';
+        const next = this.stageIndex >= MB.STAGES.length - 1 ? 'エンディングへ' : 'つぎの じかんへ';
         this.bigText(ctx, r, `タップ / Enter で ${next}`, r.h * 0.68, Math.min(r.w * 0.03, 22), '#ffd0e0');
       }
     },
@@ -650,8 +763,8 @@ window.MB = window.MB || {};
     drawGameOver(ctx, r) {
       const t = this.stateT;
       this.overlayBg(ctx, r, 0.6);
-      this.bigText(ctx, r, '✗ BUILD FAILED…', r.h * 0.33, Math.min(r.w * 0.055, 44), '#ff8a9e');
-      this.bigText(ctx, r, 'マシュマロがあふれちゃった', r.h * 0.42, Math.min(r.w * 0.032, 24));
+      this.bigText(ctx, r, 'あふれちゃった…', r.h * 0.33, Math.min(r.w * 0.055, 44), '#ff8a9e');
+      this.bigText(ctx, r, 'マシュマロが つみあがりすぎた！', r.h * 0.42, Math.min(r.w * 0.032, 24));
       ctx.font = `${Math.min(r.w * 0.028, 20)}px ${r.FONT}`;
       ctx.textAlign = 'center';
       ctx.fillStyle = '#fff';
@@ -739,9 +852,9 @@ window.MB = window.MB || {};
         Math.min(r.w, r.h) / 520, { accent: '#ffd0e0' }, {}, { beach: true });
 
       // テキスト
-      this.bigText(ctx, r, '✓ α BUILD COMPLETE', r.h * 0.16, Math.min(r.w * 0.055, 46), '#8df0a8');
+      this.bigText(ctx, r, 'よあけだ！ おしごと ぜんぶ おわった！', r.h * 0.16, Math.min(r.w * 0.05, 42), '#8df0a8');
       if (t > 1.5) {
-        this.bigText(ctx, r, 'よく はたらいた…', r.h * 0.26, Math.min(r.w * 0.035, 26), '#fff');
+        this.bigText(ctx, r, 'マロくん、よく がんばりました…', r.h * 0.26, Math.min(r.w * 0.035, 26), '#fff');
       }
       if (t > 3) {
         this.bigText(ctx, r, 'どこかの しずかな ビーチにて', r.h * 0.33, Math.min(r.w * 0.028, 20), '#ffe8c0');
@@ -749,7 +862,7 @@ window.MB = window.MB || {};
       ctx.font = `bold ${Math.min(r.w * 0.032, 24)}px ${r.FONT}`;
       ctx.textAlign = 'center';
       ctx.fillStyle = '#fff';
-      ctx.fillText(`ファイナルスコア ${U.fmtScore(this.score)}`, r.w / 2, r.h * 0.9);
+      ctx.fillText(`さいしゅうスコア ${U.fmtScore(this.score)}`, r.w / 2, r.h * 0.9);
       ctx.textAlign = 'left';
       if (t > 4 && Math.sin(t * 3) > -0.3) {
         this.bigText(ctx, r, 'タップ / Enter でタイトルへ', r.h * 0.96, Math.min(r.w * 0.024, 17), 'rgba(255,255,255,0.8)');

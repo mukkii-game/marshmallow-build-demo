@@ -32,21 +32,15 @@ window.MB = window.MB || {};
 
     layoutButtons() {
       const R = MB.render.rects;
-      if (!R.buttons) return;
+      if (!R.buttons || !R.buttons.pos) return;
       const s = R.buttons.size;
-      const L = R.buttons.left, Rt = R.buttons.right;
+      const P = R.buttons.pos;
       const keep = new Map(this.touchButtons.map((b) => [b.id, b.pressed]));
-      this.touchButtons = [
-        { id: 'left', label: '◀', x: L.x, y: L.y, r: s / 2 },
-        { id: 'right', label: '▶', x: L.x + s * 1.15, y: L.y, r: s / 2 },
-        { id: 'soft', label: '▼', x: L.x + s * 2.3, y: L.y, r: s / 2 },
-        { id: 'rotate', label: '⟳', x: Rt.x, y: Rt.y - s * 0.55, r: s / 2 },
-        { id: 'hard', label: '⤓', x: Rt.x + s * 1.15, y: Rt.y, r: s / 2 },
-      ];
-      for (const b of this.touchButtons) {
-        b.size = s;
-        b.pressed = keep.get(b.id) || false;
-      }
+      const labels = { left: '◀', right: '▶', soft: '▼', rotate: '⟳', hard: '⤓' };
+      this.touchButtons = ['left', 'right', 'soft', 'rotate', 'hard'].map((id) => ({
+        id, label: labels[id], x: P[id].x, y: P[id].y, r: s / 2,
+        size: s, pressed: keep.get(id) || false,
+      }));
     },
 
     onKey(e, down) {
@@ -137,8 +131,8 @@ window.MB = window.MB || {};
         return;
       }
 
-      // タッチ操作ボタン
-      if (g.touchMode) {
+      // 操作ボタン（マウス/タッチ共用）
+      {
         const b = this.hitButton(x, y);
         if (b) {
           b.pressed = true;

@@ -9,7 +9,10 @@ window.MB = window.MB || {};
     master: null,
     musicBus: null,
     sfxBus: null,
-    muted: false,
+    volume: 0.5,   // 0..1（デフォルトは控えめ）
+    lastVol: 0.5,
+
+    get muted() { return this.volume === 0; },
 
     ensure() {
       if (this.ctx) {
@@ -19,7 +22,7 @@ window.MB = window.MB || {};
       const AC = window.AudioContext || window.webkitAudioContext;
       this.ctx = new AC();
       this.master = this.ctx.createGain();
-      this.master.gain.value = this.muted ? 0 : 0.8;
+      this.master.gain.value = 0.8 * this.volume;
       // リミッター（音割れ・音圧の暴れ防止）
       const comp = this.ctx.createDynamicsCompressor();
       comp.threshold.value = -14;
@@ -38,9 +41,16 @@ window.MB = window.MB || {};
       return this.ctx;
     },
 
+    setVolume(v) {
+      this.volume = MB.util.clamp(v, 0, 1);
+      if (this.volume > 0) this.lastVol = this.volume;
+      if (this.master) this.master.gain.value = 0.8 * this.volume;
+      if (MB.music && MB.music.applyVolume) MB.music.applyVolume();
+    },
+
+    // 互換用: ミュートのオン/オフ
     setMuted(m) {
-      this.muted = m;
-      if (this.master) this.master.gain.value = m ? 0 : 0.8;
+      this.setVolume(m ? 0 : (this.lastVol || 0.5));
     },
   };
 

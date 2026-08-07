@@ -151,17 +151,16 @@ window.MB = window.MB || {};
       for (let i = 0; i < 2; i++) {
         const x = p.x + i;
         const top = p.cells[i], bottom = p.cells[2 + i];
-        this.fallers.push({ x, y: p.y + 1, color: bottom.color, s: bottom.s });
-        this.fallers.push({ x, y: p.y, color: top.color, s: top.s });
+        this.fallers.push({ x, y: p.y + 1, vy: C.SETTLE_START_SPEED, color: bottom.color, s: bottom.s });
+        this.fallers.push({ x, y: p.y, vy: C.SETTLE_START_SPEED, color: top.color, s: top.s });
       }
       this.piece = null;
       if (this.onLock) this.onLock();
     }
 
-    // 落下中マシュマロの更新。全部着地したら true
+    // 落下中マシュマロの更新（重力加速つき）。全部着地したら true
     updateFallers(dt) {
       if (this.fallers.length === 0) return true;
-      const speed = C.SETTLE_ROWS_PER_SEC * dt;
       // 列ごとに下のものから処理
       const byCol = new Map();
       for (const f of this.fallers) {
@@ -179,7 +178,8 @@ window.MB = window.MB || {};
         let cap = gridTop - 1;   // このセルが降りられる最下段
         let capSolid = true;     // capが接地由来（true）か、まだ落下中のセル由来（false）か
         for (const f of list) {
-          f.y = Math.min(f.y + speed, cap);
+          f.vy = (f.vy || C.SETTLE_START_SPEED) + C.SETTLE_ACCEL * dt;
+          f.y = Math.min(f.y + f.vy * dt, cap);
           if (capSolid && f.y >= cap - 1e-6) {
             // 着地（支えが確定しているときだけ固定する）
             const ty = Math.round(cap);
@@ -187,7 +187,12 @@ window.MB = window.MB || {};
               this.overflow = true;
               placed.add(f); // 場外（あふれ演出はゲーム側）
             } else {
-              this.grid[ty][x] = { color: f.color, s: f.s, marked: false, sweeping: false };
+              const now = performance.now();
+              this.grid[ty][x] = { color: f.color, s: f.s, marked: false, sweeping: false, born: now };
+              // 下のマシュマロたちがぷにっと受け止める
+              for (let jy = ty + 1; jy < Math.min(ty + 3, C.ROWS); jy++) {
+                if (this.grid[jy][x]) this.grid[jy][x].jig = now;
+              }
               placed.add(f);
               cap = ty - 1;
             }
@@ -341,7 +346,7 @@ window.MB = window.MB || {};
           const cell = this.grid[y][x];
           if (!cell && !gapFound) gapFound = true;
           else if (cell && gapFound && !cell.sweeping) {
-            this.fallers.push({ x, y, color: cell.color, s: cell.s });
+            this.fallers.push({ x, y, vy: C.SETTLE_START_SPEED, color: cell.color, s: cell.s });
             this.grid[y][x] = null;
           }
         }

@@ -9,7 +9,7 @@ window.MB = window.MB || {};
 MB.STAGES = [
   {
     id: 1, time: '19:00', name: '定時のあと',
-    bpm: 96, sweepMeasures: 2, gravityMs: 1450, quota: 12,
+    bpm: 96, sweepMeasures: 3, gravityMs: 1450, quota: 12,
     palette: {
       skyTop: '#4a3b78', skyBot: '#ff9a5c', city: '#2a2240',
       accent: '#ffd9a0', fieldBg: 'rgba(20,16,38,0.82)', frame: '#ffe9d4',
@@ -26,7 +26,7 @@ MB.STAGES = [
   },
   {
     id: 2, time: '22:00', name: 'ノッてきた',
-    bpm: 112, sweepMeasures: 2, gravityMs: 1150, quota: 17,
+    bpm: 112, sweepMeasures: 3, gravityMs: 1150, quota: 17,
     palette: {
       skyTop: '#131b3a', skyBot: '#3a4a8c', city: '#0d1228',
       accent: '#7fd4ff', fieldBg: 'rgba(10,14,34,0.84)', frame: '#cfe9ff',

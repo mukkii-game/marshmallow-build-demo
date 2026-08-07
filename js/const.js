@@ -22,6 +22,8 @@ MB.C = {
   // ピース
   S_BLOCK_INTERVAL_MIN: 9,    // Sマーク出現間隔
   S_BLOCK_INTERVAL_MAX: 14,
+  BAR_INTERVAL_MIN: 6,        // のっぽマシュマロ（棒）出現間隔
+  BAR_INTERVAL_MAX: 10,
 
   SOFT_DROP_MS: 40,
   SETTLE_START_SPEED: 5,      // 分離落下の初速（行/秒）

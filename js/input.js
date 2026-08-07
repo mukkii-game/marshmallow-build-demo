@@ -189,7 +189,8 @@ window.MB = window.MB || {};
         const R = MB.render.rects;
         const f = R.field;
         if (f && e.clientX >= f.x - R.cell * 1.5 && e.clientX <= f.x + f.w + R.cell * 1.5) {
-          const target = MB.util.clamp(Math.round((e.clientX - f.x) / R.cell - 1), 0, MB.C.COLS - 2);
+          const pw = g.field.piece.width ? g.field.piece.width() : 2;
+          const target = MB.util.clamp(Math.round((e.clientX - f.x) / R.cell - pw / 2), 0, MB.C.COLS - pw);
           let moved = false, guard = 0;
           while (g.field.piece.x !== target && guard++ < MB.C.COLS) {
             if (!g.field.tryMove(target > g.field.piece.x ? 1 : -1)) break;

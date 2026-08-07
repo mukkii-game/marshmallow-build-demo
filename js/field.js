@@ -4,13 +4,27 @@ window.MB = window.MB || {};
 (function () {
   const C = MB.C;
 
-  // ---- ピース（2x2マシュマロ。cells: 0=左上 1=右上 2=左下 3=右下）----
+  // ---- ピース ----
+  // quad: 2x2マシュマロ（cells: 0=左上 1=右上 2=左下 3=右下）
+  // bar : のっぽマシュマロ（縦1x3、回転で横3x1・単色）
   class Piece {
-    constructor(cells) {
+    constructor(cells, kind) {
       this.cells = cells; // [{color, s}]
+      this.kind = kind || 'quad';
+      this.orient = 0;    // barのみ: 0=縦 1=横
       this.x = C.SPAWN_X;
       this.y = -2;
     }
+    offsets() {
+      if (this.kind === 'bar') {
+        return this.orient === 0
+          ? [[0, 0], [0, 1], [0, 2]]
+          : [[0, 0], [1, 0], [2, 0]];
+      }
+      return [[0, 0], [1, 0], [0, 1], [1, 1]];
+    }
+    width() { return this.kind === 'bar' ? (this.orient === 0 ? 1 : 3) : 2; }
+    height() { return this.kind === 'bar' ? (this.orient === 0 ? 3 : 1) : 2; }
     rotate(dir) {
       const c = this.cells;
       if (dir > 0) { // 時計回り: TL->TR->BR->BL->TL
@@ -24,18 +38,25 @@ window.MB = window.MB || {};
   class PieceGen {
     constructor() {
       this.sCountdown = MB.util.randInt(C.S_BLOCK_INTERVAL_MIN, C.S_BLOCK_INTERVAL_MAX);
+      this.barCountdown = MB.util.randInt(C.BAR_INTERVAL_MIN, C.BAR_INTERVAL_MAX);
     }
     next() {
+      // ときどき「のっぽマシュマロ」（単色の棒）
+      if (--this.barCountdown <= 0) {
+        this.barCountdown = MB.util.randInt(C.BAR_INTERVAL_MIN, C.BAR_INTERVAL_MAX);
+        const col = Math.random() < 0.5 ? C.WHITE : C.PINK;
+        return new Piece([{ color: col, s: false }, { color: col, s: false }, { color: col, s: false }], 'bar');
+      }
       const r = Math.random();
       const A = Math.random() < 0.5 ? C.WHITE : C.PINK;
       const B = A === C.WHITE ? C.PINK : C.WHITE;
       let colors;
-      if (r < 0.1) {
+      if (r < 0.18) { // 単色（巨大合体のもと）
         colors = [A, A, A, A];
-      } else if (r < 0.35) { // 3-1
+      } else if (r < 0.42) { // 3-1
         colors = [A, A, A, A];
         colors[MB.util.randInt(0, 3)] = B;
-      } else if (r < 0.72) { // 2-2 隣接（縦割り/横割り）
+      } else if (r < 0.82) { // 2-2 隣接（縦割り/横割り）
         colors = Math.random() < 0.5 ? [A, B, A, B] : [A, A, B, B];
       } else { // 2-2 対角
         colors = [A, B, B, A];
@@ -88,8 +109,9 @@ window.MB = window.MB || {};
       return this.grid[y][x];
     }
 
-    canPlace(px, py) {
-      for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+    // ピースの形状で置けるか判定
+    canPlacePiece(p, px, py) {
+      for (const [dx, dy] of p.offsets()) {
         const x = px + dx, y = py + dy;
         if (x < 0 || x >= C.COLS) return false;
         if (y >= C.ROWS) return false;
@@ -98,22 +120,44 @@ window.MB = window.MB || {};
       return true;
     }
 
+    canPlace(px, py) {
+      return this.piece ? this.canPlacePiece(this.piece, px, py) : false;
+    }
+
     spawn(piece) {
-      piece.x = C.SPAWN_X;
-      piece.y = -2;
+      piece.x = Math.min(C.SPAWN_X, C.COLS - piece.width());
+      piece.y = -piece.height();
       this.piece = piece;
     }
 
     tryMove(dx) {
       const p = this.piece;
       if (!p) return false;
-      if (this.canPlace(p.x + dx, p.y)) { p.x += dx; return true; }
+      if (this.canPlacePiece(p, p.x + dx, p.y)) { p.x += dx; return true; }
       return false;
     }
 
     tryRotate(dir) {
       const p = this.piece;
       if (!p) return false;
+      if (p.kind === 'bar') {
+        // 縦⇔横。壁や積みに当たるときは少しずらして試す（壁蹴り）
+        const oldOrient = p.orient, oldX = p.x, oldY = p.y;
+        p.orient ^= 1;
+        const cands = p.orient === 1
+          ? [[0, 0], [-1, 0], [-2, 0], [0, -1]]   // 横になる: 左へずらす
+          : [[0, 0], [0, -1], [0, -2], [1, 0]];   // 縦になる: 上へずらす
+        for (const [dx, dy] of cands) {
+          const nx = MB.util.clamp(p.x + dx, 0, C.COLS - p.width());
+          if (this.canPlacePiece(p, nx, p.y + dy)) {
+            p.x = nx;
+            p.y += dy;
+            return true;
+          }
+        }
+        p.orient = oldOrient; p.x = oldX; p.y = oldY;
+        return false;
+      }
       p.rotate(dir);
       return true; // 2x2の色回転は衝突形状が変わらないため常に成功
     }
@@ -122,7 +166,7 @@ window.MB = window.MB || {};
     dropStep() {
       const p = this.piece;
       if (!p) return 'none';
-      if (this.canPlace(p.x, p.y + 1)) { p.y++; return 'moved'; }
+      if (this.canPlacePiece(p, p.x, p.y + 1)) { p.y++; return 'moved'; }
       this.lockPiece();
       return 'locked';
     }
@@ -131,7 +175,7 @@ window.MB = window.MB || {};
       const p = this.piece;
       if (!p) return 0;
       let dist = 0;
-      while (this.canPlace(p.x, p.y + 1)) { p.y++; dist++; }
+      while (this.canPlacePiece(p, p.x, p.y + 1)) { p.y++; dist++; }
       this.lockPiece();
       return dist;
     }
@@ -140,19 +184,21 @@ window.MB = window.MB || {};
       const p = this.piece;
       if (!p) return -99;
       let y = p.y;
-      while (this.canPlace(p.x, y + 1)) y++;
+      while (this.canPlacePiece(p, p.x, y + 1)) y++;
       return y;
     }
 
     lockPiece() {
       const p = this.piece;
       if (!p) return;
-      // 列ごとに分離して落下アニメへ（上のセルが先頭）
-      for (let i = 0; i < 2; i++) {
-        const x = p.x + i;
-        const top = p.cells[i], bottom = p.cells[2 + i];
-        this.fallers.push({ x, y: p.y + 1, vy: C.SETTLE_START_SPEED, color: bottom.color, s: bottom.s });
-        this.fallers.push({ x, y: p.y, vy: C.SETTLE_START_SPEED, color: top.color, s: top.s });
+      // 列ごとに分離して落下アニメへ
+      const offs = p.offsets();
+      for (let i = 0; i < offs.length; i++) {
+        const [dx, dy] = offs[i];
+        this.fallers.push({
+          x: p.x + dx, y: p.y + dy, vy: C.SETTLE_START_SPEED,
+          color: p.cells[i].color, s: p.cells[i].s,
+        });
       }
       this.piece = null;
       if (this.onLock) this.onLock();

@@ -147,6 +147,46 @@ window.MB = window.MB || {};
       ctx.restore();
     },
 
+    // 長方形のジャイアントマシュマロ（2x3, 3x3 など）
+    bigMallow(ctx, x, y, w, h, color, opts) {
+      opts = opts || {};
+      const cx = x + w / 2, cy = y + h / 2;
+      const hw = w / 2, hh = h / 2;
+      const r = Math.min(w, h) * (opts.round == null ? 0.34 : opts.round);
+      const white = color === C.WHITE;
+      const fill = white ? '#fdf5ec' : '#ffc9dc';
+      const shade = white ? '#e3d2c2' : '#ea9dbd';
+      ctx.save();
+      ctx.translate(cx, cy);
+      // ふんわり影
+      ctx.fillStyle = 'rgba(60,40,60,0.14)';
+      ctx.beginPath();
+      ctx.ellipse(0, hh * 0.94, hw * 0.9, hh * 0.18, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // 本体
+      U.rr(ctx, -hw, -hh, w, h, r);
+      ctx.fillStyle = fill;
+      ctx.fill();
+      ctx.save();
+      U.rr(ctx, -hw, -hh, w, h, r);
+      ctx.clip();
+      ctx.fillStyle = shade;
+      ctx.globalAlpha = 0.5;
+      ctx.beginPath();
+      ctx.ellipse(0, hh * 1.2, hw * 1.25, hh * 0.85, 0, 0, Math.PI * 2);
+      ctx.fill();
+      const g = ctx.createRadialGradient(-hw * 0.35, -hh * 0.4, Math.min(w, h) * 0.05, 0, 0, Math.max(w, h) * 0.8);
+      g.addColorStop(0, 'rgba(255,255,255,0.95)');
+      g.addColorStop(0.45, 'rgba(255,255,255,0.25)');
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = g;
+      U.rr(ctx, -hw, -hh, w, h, r);
+      ctx.fill();
+      ctx.restore();
+      ctx.restore();
+    },
+
     // 色と状態から塗り色を返す
     fillFor(color, sweeping) {
       const white = color === C.WHITE;
@@ -678,21 +718,22 @@ window.MB = window.MB || {};
               }
             }
           }
-          comp.isKing = comp.cells.length === 4 &&
-            (comp.maxX - comp.minX === 1) && (comp.maxY - comp.minY === 1);
+          // 長方形にきれいに詰まっていれば一枚岩のジャイアントマシュマロに
+          const rw = comp.maxX - comp.minX + 1, rh = comp.maxY - comp.minY + 1;
+          comp.isRect = comp.cells.length >= 4 && comp.cells.length === rw * rh;
           comps.push(comp);
         }
       }
-      const inKing = (x, y) => {
+      const inRect = (x, y) => {
         const id = compOf[y * C.COLS + x];
-        return id !== undefined && comps[id].isKing;
+        return id !== undefined && comps[id].isRect;
       };
 
-      // パスA: 個別マシュマロ（キング化した4つは飛ばす）
+      // パスA: 個別マシュマロ（ジャイアント化するセルは飛ばす）
       for (let y = 0; y < C.ROWS; y++) {
         for (let x = 0; x < C.COLS; x++) {
           const cd = grid[y][x];
-          if (!cd || inKing(x, y)) continue;
+          if (!cd || inRect(x, y)) continue;
           const px = f.x + x * cell, py = f.y + y * cell;
           const sq = MB.draw.squash(cd);
           const rot = (((x * 13 + y * 7) % 9) - 4) * 0.014;
@@ -707,44 +748,48 @@ window.MB = window.MB || {};
       for (let y = 0; y < C.ROWS; y++) {
         for (let x = 0; x < C.COLS; x++) {
           const cd = grid[y][x];
-          if (!cd || inKing(x, y)) continue;
+          if (!cd || inRect(x, y)) continue;
           const px = f.x + x * cell, py = f.y + y * cell;
           const right = x + 1 < C.COLS ? grid[y][x + 1] : null;
-          if (right && !inKing(x + 1, y) && stateOf(right) === stateOf(cd)) {
+          if (right && !inRect(x + 1, y) && stateOf(right) === stateOf(cd)) {
             MB.draw.bridge(ctx, px, py, px + cell, py, cell, cd.color, cd.sweeping);
           }
           const down = y + 1 < C.ROWS ? grid[y + 1][x] : null;
-          if (down && !inKing(x, y + 1) && stateOf(down) === stateOf(cd)) {
+          if (down && !inRect(x, y + 1) && stateOf(down) === stateOf(cd)) {
             MB.draw.bridge(ctx, px, py, px, py + cell, cell, cd.color, cd.sweeping);
           }
         }
       }
-      // パスC: 予約領域の仕上げ（キングマシュマロ／領域の顔と光）
+      // パスC: 予約領域の仕上げ（ジャイアントマシュマロ／領域の顔と光）
       for (const comp of comps) {
         const pulse = 1 + 0.04 * beat;
-        if (comp.isKing) {
-          const size = cell * 2 * pulse;
-          const px = f.x + comp.minX * cell - (size - cell * 2) / 2;
-          const py = f.y + comp.minY * cell - (size - cell * 2) / 2;
-          MB.draw.marshmallow(ctx, px, py, size, comp.color, { round: 0.36, noFace: true, marked: true });
-          const cx2 = px + size / 2, cy2 = py + size * 0.46;
-          MB.draw.face(ctx, cx2, cy2, size * 0.5, beat);
+        if (comp.isRect) {
+          const rw = (comp.maxX - comp.minX + 1) * cell;
+          const rh = (comp.maxY - comp.minY + 1) * cell;
+          const gw = rw * pulse, gh = rh * pulse;
+          const px = f.x + comp.minX * cell - (gw - rw) / 2;
+          const py = f.y + comp.minY * cell - (gh - rh) / 2;
+          MB.draw.bigMallow(ctx, px, py, gw, gh, comp.color);
+          const faceS = Math.min(gw, gh) * 0.5;
+          const cx2 = px + gw / 2, cy2 = py + gh * 0.46;
+          MB.draw.face(ctx, cx2, cy2, faceS, beat);
           if (comp.hasS) {
+            const br = Math.min(gw, gh) * 0.1;
             ctx.fillStyle = '#ff5c96';
             ctx.beginPath();
-            ctx.arc(px + size * 0.8, py + size * 0.22, size * 0.1, 0, Math.PI * 2);
+            ctx.arc(px + gw - br * 2, py + br * 2.2, br, 0, Math.PI * 2);
             ctx.fill();
             ctx.fillStyle = '#fff';
-            ctx.font = `bold ${Math.round(size * 0.13)}px sans-serif`;
+            ctx.font = `bold ${Math.round(br * 1.3)}px sans-serif`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText('S', px + size * 0.8, py + size * 0.23);
+            ctx.fillText('S', px + gw - br * 2, py + br * 2.3);
             ctx.textAlign = 'left';
             ctx.textBaseline = 'alphabetic';
           }
           ctx.strokeStyle = `rgba(255,235,150,${0.35 + 0.35 * beat})`;
           ctx.lineWidth = 3;
-          U.rr(ctx, px + 2, py + 2, size - 4, size - 4, size * 0.33);
+          U.rr(ctx, px + 2, py + 2, gw - 4, gh - 4, Math.min(gw, gh) * 0.3);
           ctx.stroke();
         } else {
           // 大きな連結領域: 中央にひとつ顔、外周はほんのり光る
@@ -775,13 +820,15 @@ window.MB = window.MB || {};
       // 操作ピース＋ゴースト
       const p = field.piece;
       if (p && game.state === MB.STATE.PLAY) {
+        const offs = p.offsets();
         const gy = field.ghostY();
         if (gy > p.y) {
           // 着地予測: 点線の枠だけ（マシュマロと見間違えないように）
           ctx.strokeStyle = 'rgba(255,255,255,0.4)';
           ctx.lineWidth = 2;
           ctx.setLineDash([7, 6]);
-          U.rr(ctx, f.x + p.x * cell + 3, f.y + gy * cell + 3, cell * 2 - 6, cell * 2 - 6, cell * 0.45);
+          U.rr(ctx, f.x + p.x * cell + 3, f.y + gy * cell + 3,
+               p.width() * cell - 6, p.height() * cell - 6, cell * 0.45);
           ctx.stroke();
           ctx.setLineDash([]);
         }
@@ -789,21 +836,22 @@ window.MB = window.MB || {};
         const vx = game.pieceVisX == null ? p.x : game.pieceVisX;
         const vy = game.pieceVisY == null ? p.y : game.pieceVisY;
         const wob = U.clamp((p.x - vx) * -0.2, -0.16, 0.16);
-        const cellPos = [[0, 0, 0], [1, 1, 0], [2, 0, 1], [3, 1, 1]];
-        for (const [i, dx, dy] of cellPos) {
+        offs.forEach(([dx, dy], i) => {
           MB.draw.marshmallow(ctx, f.x + (vx + dx) * cell, f.y + (vy + dy) * cell, cell, p.cells[i].color, {
-            s: p.cells[i].s, rot: wob + (i - 1.5) * 0.015,
+            s: p.cells[i].s, rot: wob + (i - (offs.length - 1) / 2) * 0.015,
           });
-        }
+        });
         // ピース内の同色もむにっと融合
-        for (const [a, b] of [[0, 1], [2, 3], [0, 2], [1, 3]]) {
-          if (p.cells[a].color !== p.cells[b].color) continue;
-          const [, ax, ay] = cellPos[a];
-          const [, bx2, by2] = cellPos[b];
-          MB.draw.bridge(ctx,
-            f.x + (vx + ax) * cell, f.y + (vy + ay) * cell,
-            f.x + (vx + bx2) * cell, f.y + (vy + by2) * cell,
-            cell, p.cells[a].color, false);
+        for (let a = 0; a < offs.length; a++) {
+          for (let b = a + 1; b < offs.length; b++) {
+            if (p.cells[a].color !== p.cells[b].color) continue;
+            const [ax, ay] = offs[a], [bx2, by2] = offs[b];
+            if (Math.abs(ax - bx2) + Math.abs(ay - by2) !== 1) continue;
+            MB.draw.bridge(ctx,
+              f.x + (vx + ax) * cell, f.y + (vy + ay) * cell,
+              f.x + (vx + bx2) * cell, f.y + (vy + by2) * cell,
+              cell, p.cells[a].color, false);
+          }
         }
       }
 
@@ -873,9 +921,12 @@ window.MB = window.MB || {};
 
     drawMiniPiece(pc, x, y, cell) {
       const ctx = this.ctx;
-      for (const [i, dx, dy] of [[0, 0, 0], [1, 1, 0], [2, 0, 1], [3, 1, 1]]) {
-        MB.draw.marshmallow(ctx, x + dx * cell, y + dy * cell, cell, pc.cells[i].color, { s: pc.cells[i].s });
-      }
+      const offs = pc.offsets ? pc.offsets() : [[0, 0], [1, 0], [0, 1], [1, 1]];
+      const scale = pc.kind === 'bar' ? 0.72 : 1; // のっぽは縮めて枠に収める
+      offs.forEach(([dx, dy], i) => {
+        MB.draw.marshmallow(ctx, x + dx * cell * scale + (pc.kind === 'bar' ? cell * 0.5 : 0),
+          y + dy * cell * scale, cell * scale, pc.cells[i].color, { s: pc.cells[i].s });
+      });
     },
 
     // ---- HUD（スコア/進捗/ノリゲージ） ----

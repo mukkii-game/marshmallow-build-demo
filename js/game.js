@@ -157,7 +157,8 @@ window.MB = window.MB || {};
       this.gravAcc = 0;
       this.softDropping = false;
       this.spawnDelay = 0;
-      this.stats = { squares: 0, maxGroup: 0, chainCells: 0, machCount: 0, eaten: 0 };
+      this.stats = { squares: 0, maxGroup: 0, chainCells: 0, machCount: 0, eaten: 0, justCount: 0 };
+      this.justCombo = 0;
       MB.fx.reset();
       MB.character.reset();
     },
@@ -249,6 +250,23 @@ window.MB = window.MB || {};
       }
     },
 
+    // ビートぴったりのストン: 気持ちよさボーナス（外しても罰はなし）
+    onJustDrop(x, y) {
+      this.justCombo = (this.justCombo || 0) + 1;
+      const mult = this.mach ? 2 : 1;
+      this.score += 50 * Math.min(this.justCombo, 8) * mult;
+      this.stats.justCount = (this.stats.justCount || 0) + 1;
+      if (!this.mach) {
+        this.flowGauge = Math.min(100, this.flowGauge + 5);
+        if (this.flowGauge >= 100) this.triggerMach();
+      }
+      if (MB.audio.ctx) MB.sfx.just(this.justCombo);
+      const label = this.justCombo >= 2 ? `ジャスト×${this.justCombo}！` : 'ジャスト♪';
+      MB.fx.text(x, y - 14, label, '#ffe28a', Math.max(18, MB.render.rects.cell * 0.5));
+      MB.fx.stars(x, y + MB.render.rects.cell, 6 + this.justCombo * 2, '#ffe28a');
+      if (this.justCombo === 4) MB.character.say('ノリノリだー！！', true);
+    },
+
     handleSweepMiss() {
       if (!this.mach && this.flowGauge > 0) {
         this.flowGauge = Math.max(0, this.flowGauge - C.GAUGE_MISS_DECAY);
@@ -329,10 +347,22 @@ window.MB = window.MB || {};
           case 'softEnd': this.softDropping = false; break;
           case 'hard':
             if (this.field.piece) {
+              // ビートに合わせたストンは「ジャスト」！
+              const p = this.field.piece;
+              const gy = this.field.ghostY();
+              const R2 = MB.render.rects;
+              const landX = R2.field.x + (p.x + p.width() / 2) * R2.cell;
+              const landY = R2.field.y + gy * R2.cell;
+              const bi = MB.music.started ? MB.music.beatInfo() : null;
               this.field.hardDrop();
               if (MB.audio.ctx) MB.sfx.hardDrop();
               MB.fx.shake(3);
               this.gravAcc = 0;
+              if (bi && Math.abs(bi.offsetMs) <= 95) {
+                this.onJustDrop(landX, landY);
+              } else {
+                this.justCombo = 0;
+              }
             }
             break;
           case 'pause':
@@ -835,7 +865,7 @@ window.MB = window.MB || {};
           ctx.fillStyle = grad;
           U.rr(ctx, icoX - rowH * 0.33, cy - rowH * 0.1, rowH * 0.55, rowH * 0.2, rowH * 0.1);
           ctx.fill();
-          return 'いっぱい たべさせると ノリノリ → マッハタイム で 2ばい！';
+          return 'ビートに あわせて ストン＝ジャスト♪ ノリノリで マッハタイム！';
         },
         () => { // Sマーク
           const m = rowH * 0.55;
@@ -897,7 +927,7 @@ window.MB = window.MB || {};
         ctx.fillStyle = '#fff';
         const s = this.stats;
         ctx.fillText(`スコア ${U.fmtScore(this.score)}　たべたマシュマロ ${s.eaten}こ`, r.w / 2, r.h * 0.53);
-        ctx.fillText(`さいだい同時消し ${s.maxGroup}　マッハ ${s.machCount}回`, r.w / 2, r.h * 0.575);
+        ctx.fillText(`さいだい同時消し ${s.maxGroup}　マッハ ${s.machCount}回　ジャスト ${s.justCount || 0}回`, r.w / 2, r.h * 0.575);
         ctx.textAlign = 'left';
       }
       if (t > 1.2 && Math.sin(t * 4) > -0.3) {

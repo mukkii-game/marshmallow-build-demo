@@ -641,6 +641,26 @@ window.MB = window.MB || {};
       ctx.fillText(title, f.x + f.w / 2, wy - barH / 2 - 1);
       ctx.textAlign = 'left';
 
+      // ビートインジケーター（4拍ドット・タイトルバー右）
+      if (MB.music.started && (game.state === MB.STATE.PLAY || game.state === MB.STATE.PAUSE)) {
+        const bi = MB.music.beatInfo();
+        if (bi) {
+          const cur = ((bi.idx % 4) + 4) % 4;
+          const dotY = wy - barH / 2 - 6;
+          for (let i = 0; i < 4; i++) {
+            const dx = f.x + f.w - 66 + i * 17;
+            const active = i === cur;
+            const rr2 = (i === 0 ? 5.5 : 4.5) * (active ? 1 + 0.5 * beat : 1);
+            ctx.fillStyle = active
+              ? (game.mach ? 'rgba(255,200,90,0.95)' : 'rgba(150,220,255,0.95)')
+              : 'rgba(255,255,255,0.22)';
+            ctx.beginPath();
+            ctx.arc(dx, dotY, rr2, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      }
+
       // フィールド背景（スポーン領域は少し明るく）
       ctx.fillStyle = pal.fieldBg;
       ctx.fillRect(f.x, wy, f.w, f.h + topPad);

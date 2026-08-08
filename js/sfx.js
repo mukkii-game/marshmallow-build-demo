@@ -232,6 +232,15 @@ window.MB = window.MB || {};
     tone({ type: 'sine', freq: 1480, freqEnd: 1970, t: 0.12, dur: 0.12, gain: 0.04 });
   };
 
+  // ジャストドロップ: BGMのキーに乗る和音チャイム（コンボで上がる）
+  sfx.just = (combo) => {
+    const notes = [N.C6, N.E6, N.G6, N.C7];
+    const f = notes[Math.min(combo - 1, notes.length - 1)];
+    bell({ freq: f, dur: 0.35, gain: 0.13 });
+    if (combo > 1) bell({ freq: f * 1.5, t: 0.05, dur: 0.28, gain: 0.07 });
+    if (combo >= 4) noise({ dur: 0.25, gain: 0.04, freq: 7000, q: 0.5, type: 'highpass', t: 0.06 });
+  };
+
   // 「ごくん」
   sfx.gulp = () => {
     tone({ type: 'sine', freq: 300, freqEnd: 110, dur: 0.14, gain: 0.13, attack: 0.01 });

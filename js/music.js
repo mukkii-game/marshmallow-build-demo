@@ -134,6 +134,21 @@ window.MB = window.MB || {};
       return 0;
     },
 
+    // いまの拍情報: offsetMs=最寄りの拍からのズレ, idx=拍番号（4で1小節）
+    beatInfo() {
+      let t = -1;
+      const spb = 60 / this.bpm;
+      if (this.mode === 'theme' && this.themeAudio) {
+        t = this.themeAudio.currentTime - MB.THEME_SYNC.offset;
+      } else if (this.mode === 'gen') {
+        t = this.now() - this.loopStartTime;
+      }
+      if (t < 0) return null;
+      const frac = (t / spb) % 1;
+      const off = frac < 0.5 ? frac : frac - 1;
+      return { offsetMs: off * spb * 1000, idx: Math.floor(t / spb) };
+    },
+
     // 拍位相 0..1（1拍で1周・演出パルス用）
     getBeatPulse() {
       let t = -1, spb = 60 / this.bpm;

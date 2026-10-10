@@ -409,6 +409,7 @@ window.MB = window.MB || {};
         case 'pause_title': MB.music.stop(); this.backToTitle(); break;
         case 'pause_mute': this.cycleVolume(); break;
         case 'vol_cycle': this.cycleVolume(); break;
+        case 'goto_poyon': location.href = 'poyon/'; break;
         case 'menu_music':
           this.data.music = this.data.music === 'theme' ? 'gen' : 'theme';
           U.save(this.data);
@@ -702,6 +703,9 @@ window.MB = window.MB || {};
           ctx.fillText(txt, r.w / 2, y);
         }
         ctx.textAlign = 'left';
+        // 新作の試作への入口
+        const nb = Math.min(r.w * 0.3, 230);
+        this.uiButton(ctx, r, 'goto_poyon', '🆕 ぎゅっとリズム', r.w - nb / 2 - 12, 64, nb, 44, true);
       } else {
         // モード選択
         const bw = Math.min(r.w * 0.6, 420);
